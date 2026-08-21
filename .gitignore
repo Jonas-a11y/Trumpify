@@ -1,2 +1,5 @@
 .env
 hai_proxy.txt
+config.json
+*.log
+.DS_Store

@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  lint:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lua
+        run: brew install lua
+
+      - name: Install luacheck
+        run: brew install luacheck || luarocks install luacheck
+
+      - name: Run luacheck
+        run: luacheck trumpify/ prompts/ || true
+
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lua
+        run: brew install lua
+
+      - name: Install busted
+        run: |
+          brew install luarocks
+          luarocks install busted
+
+      - name: Run tests
+        run: |
+          cd test
+          busted .
