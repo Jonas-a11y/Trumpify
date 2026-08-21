@@ -1,0 +1,9 @@
+-- busted configuration: run `busted .` from the project root
+return {
+    _all = {
+        pattern = "test_",
+        files = {
+            "test",
+        },
+    },
+}

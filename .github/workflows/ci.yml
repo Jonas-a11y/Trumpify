@@ -35,6 +35,4 @@ jobs:
           luarocks install busted
 
       - name: Run tests
-        run: |
-          cd test
-          busted .
+        run: busted .
