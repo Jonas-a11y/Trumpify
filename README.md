@@ -79,7 +79,8 @@ All shortcuts use **Ctrl + Option** (`⌃⌥`) as the base modifier.
 | `⌃⌥M` | Read Aloud | Reads the selected text aloud (Edge neural voice) |
 | `⌃⌥Y` | Summarize & Speak | Summarizes and reads the summary aloud |
 | `⌃⌥.` | Stop TTS | Stops current speech playback |
-| `⌃⌥Space` | Chooser | Searchable menu of all modes + Settings |
+| `⌃⌥H` | History | Browse recent transformations: copy, paste or read aloud |
+| `⌃⌥Space` | Chooser | Searchable menu of all modes + Settings + History |
 | `⌃⌥R` | Reload | Reloads Hammerspoon config |
 
 ### Copy-only mode
@@ -93,12 +94,21 @@ Hold **Shift** with any shortcut to copy the result to your clipboard **without 
 
 Read Aloud and Summarize & Speak use [edge-tts](https://github.com/rany2/edge-tts) (Microsoft Edge neural voices) for natural speech:
 
+- **Streaming playback** — if [ffmpeg](https://ffmpeg.org/) (`ffplay`, `brew install ffmpeg`) is installed, audio starts playing while the text is still being generated; otherwise chunks are played as files
 - **Automatic language detection** — German texts are read with a German voice, English with an English one
-- **Long text support** — texts are split into chunks at sentence boundaries and played back in a pipeline (playback starts while later chunks are still generating)
+- **Long text support** — texts are split into chunks at sentence boundaries and played back sequentially
 - **Stop anytime** — press `⌃⌥.` while speaking
 - **Fallback** — if edge-tts is unavailable or fails, Trumpify falls back to the built-in macOS voice (configurable)
 
 Voice, rate, volume and pitch can be changed in the Settings panel.
+
+## History
+
+Every transformation is kept in a ring buffer (last 5 results). Press `⌃⌥H` or choose **History** in the chooser to browse them and pick an action:
+
+- **Copy** — copy the result back to the clipboard
+- **Paste** — paste it at the cursor position
+- **Read Aloud** — speak the result
 
 ## Settings Panel
 
@@ -198,8 +208,9 @@ Trumpify/
 │   ├── transformer.lua     Orchestrates capture → API → paste/copy/dialog
 │   ├── hotkeys.lua         Hotkey registration and chooser management
 │   ├── history.lua         Ring buffer of recent transformations
+│   ├── history_browser.lua Chooser UI to reuse past results
 │   ├── prompt_loader.lua   Dynamic prompt loader with validation + fallback
-│   ├── tts.lua             Text-to-speech via edge-tts with chunked playback
+│   ├── tts.lua             Text-to-speech via edge-tts with streaming playback
 │   ├── settings_panel.lua  Webview-based settings UI (voice/keys/modes/API)
 │   └── prompts.lua         Embedded prompt definitions (fallback)
 ├── prompts/                External prompt files (one .lua per mode)

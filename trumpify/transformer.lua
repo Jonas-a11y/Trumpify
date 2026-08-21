@@ -1,5 +1,4 @@
 local constants = require("trumpify.constants")
-local config = require("trumpify.config")
 local ui = require("trumpify.ui")
 local selection = require("trumpify.selection")
 local api = require("trumpify.api")

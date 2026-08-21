@@ -94,5 +94,44 @@ describe("hotkeys key resolution", function()
         assert.are_equal("stop_tts", reserved["."])
         assert.are_equal("reload", reserved["r"])
         assert.are_equal("chooser", reserved["space"])
+        assert.are_equal("history", reserved["h"])
+    end)
+end)
+
+describe("history browser", function()
+    local hb
+
+    before_each(function()
+        local ok, mod = pcall(require, "trumpify.history_browser")
+        if not ok then pending("history_browser not loadable") end
+        hb = mod
+    end)
+
+    it("builds one choice per entry with index back-reference", function()
+        local entries = {
+            { mode = "Summary", output = "short result", timestamp = 1700000000 },
+            { mode = "Email",   output = "email result", timestamp = 1700000100 },
+        }
+        local choices = hb.build_choices(entries)
+        assert.are_equal(2, #choices)
+        assert.are_equal(1, choices[1].idx)
+        assert.are_equal(2, choices[2].idx)
+        assert.truthy(choices[1].text:find("Summary"))
+        assert.truthy(choices[2].text:find("Email"))
+    end)
+
+    it("truncates long previews and strips newlines", function()
+        local entries = {
+            { mode = "X", output = string.rep("a", 200) .. "\nsecond line", timestamp = 0 },
+        }
+        local choices = hb.build_choices(entries)
+        assert.is_true(#choices[1].subText <= 130)
+        assert.falsy(choices[1].subText:find("\n"))
+        assert.truthy(choices[1].subText:find("%.%.%."))
+    end)
+
+    it("handles empty or nil input", function()
+        assert.are_equal(0, #hb.build_choices({}))
+        assert.are_equal(0, #hb.build_choices(nil))
     end)
 end)

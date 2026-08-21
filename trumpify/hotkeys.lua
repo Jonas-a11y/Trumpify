@@ -8,7 +8,7 @@ local ui = require("trumpify.ui")
 local M = {}
 
 local _registered_hotkeys = {}
-local _reserved_keys = { r = "reload", space = "chooser", ["."] = "stop_tts", [","] = "reserved" }
+local _reserved_keys = { r = "reload", space = "chooser", ["."] = "stop_tts", [","] = "reserved", h = "history" }
 local _chooser = nil
 
 function M.get_reserved_keys()
@@ -104,12 +104,24 @@ function M.register_stop_tts_hotkey()
     end)
 end
 
+function M.register_history_hotkey()
+    hs.hotkey.bind(constants.MODIFIERS, "h", function()
+        local history_browser = require("trumpify.history_browser")
+        history_browser.show()
+    end)
+end
+
 local function _build_choices()
     local choices = prompt_loader.get_chooser_choices()
     table.insert(choices, {
         text = "Settings",
         subText = "Configure Trumpify",
         modeKey = "__settings__",
+    })
+    table.insert(choices, {
+        text = "History",
+        subText = "Browse recent transformations: copy, paste or read aloud",
+        modeKey = "__history__",
     })
     return choices
 end
@@ -120,6 +132,11 @@ function M.create_chooser()
         if choice.modeKey == "__settings__" then
             local settings_panel = require("trumpify.settings_panel")
             settings_panel.show()
+            return
+        end
+        if choice.modeKey == "__history__" then
+            local history_browser = require("trumpify.history_browser")
+            history_browser.show()
             return
         end
         local modes = prompt_loader.get_modes()
@@ -152,6 +169,7 @@ function M.init()
     local errors = M.register_all()
     M.register_reload_hotkey()
     M.register_stop_tts_hotkey()
+    M.register_history_hotkey()
     return errors
 end
 

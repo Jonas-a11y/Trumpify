@@ -21,6 +21,7 @@ M._generating_done = nil
 
 local EDGE_TTS_PATH = "/opt/homebrew/bin/edge-tts"
 local AFPLAY_PATH = "/usr/bin/afplay"
+local FFPLAY_PATH = "/opt/homebrew/bin/ffplay"
 local TMP_DIR = "/tmp"
 local CHUNK_MAX_LEN = 1800
 
@@ -81,7 +82,8 @@ local function _cleanup_orphan_tmpfiles()
     pcall(function()
         for name in hs.fs.dir(TMP_DIR) do
             if type(name) == "string"
-                and name:match("^trumpify_tts_%d+_%d+%.mp3$") then
+                and (name:match("^trumpify_tts_%d+_%d+%.mp3$")
+                    or name:match("^trumpify_tts_%d+_%d+%.fifo$")) then
                 os.remove(TMP_DIR .. "/" .. name)
             end
         end
@@ -196,9 +198,23 @@ local function _edge_tts_available()
     return hs.fs.attributes and hs.fs.attributes(EDGE_TTS_PATH) ~= nil
 end
 
+local function _ffplay_available()
+    return hs.fs.attributes and hs.fs.attributes(FFPLAY_PATH) ~= nil
+end
+
 local function _make_tmpfile(idx)
     return TMP_DIR .. "/trumpify_tts_" .. tostring(os.time())
         .. "_" .. tostring(idx) .. ".mp3"
+end
+
+-- Create a named pipe for streaming playback (used with ffplay).
+local function _make_fifo(idx)
+    local path = TMP_DIR .. "/trumpify_tts_" .. tostring(os.time())
+        .. "_" .. tostring(idx) .. ".fifo"
+    pcall(os.remove, path)
+    local ok = pcall(hs.execute, "mkfifo " .. path)
+    if ok then return path end
+    return nil
 end
 
 local function _remove_file(file)
@@ -213,6 +229,10 @@ local function _reset_pipeline()
     M._generator = nil
     M._player = nil
     M._generating_done = nil
+    M._cur_idx = nil
+    M._current_fifo = nil
+    M._chunk_done = nil
+    M._completed_any = nil
 end
 
 local function _fallback_speak(text)
@@ -226,7 +246,8 @@ local function _fallback_speak(text)
 end
 
 local function _handle_failure(message)
-    local had_audio = (M._playlist and #M._playlist > 0)
+    local had_audio = M._completed_any
+        or (M._playlist and #M._playlist > 0)
         or (M._player ~= nil)
     local full_text = M._chunks and table.concat(M._chunks, " ") or nil
     local files = M._all_files
@@ -245,6 +266,100 @@ local function _handle_failure(message)
         end
     end
 end
+
+-- ===== Streaming mode (ffplay + named pipe) =====
+-- Audio starts playing as soon as the first bytes of a chunk arrive,
+-- instead of waiting for the whole chunk to be generated. Chunks play
+-- strictly one after another; if ffplay is unavailable the file-based
+-- pipeline below is used instead.
+
+local _stream_chunk  -- forward declaration (mutual recursion with _on_chunk_done)
+
+local function _on_chunk_done(success, message)
+    if not M._chunks or M._chunk_done then return end
+    M._chunk_done = true
+
+    if M._generator then
+        pcall(function() M._generator:terminate() end)
+        M._generator = nil
+    end
+    if M._player then
+        pcall(function() M._player:terminate() end)
+        M._player = nil
+    end
+    _remove_file(M._current_fifo)
+    M._current_fifo = nil
+
+    if not success then
+        _handle_failure(message)
+        return
+    end
+
+    M._completed_any = true
+    local next_idx = (M._cur_idx or 0) + 1
+    if next_idx > #M._chunks then
+        _reset_pipeline()
+    else
+        M._cur_idx = next_idx
+        _stream_chunk(next_idx)
+    end
+end
+
+_stream_chunk = function(idx)
+    M._chunk_done = false
+
+    local text = M._chunks[idx]
+    local fifo = _make_fifo(idx)
+    if not fifo then
+        _on_chunk_done(false, "could not create named pipe")
+        return
+    end
+    M._current_fifo = fifo
+    table.insert(M._all_files, fifo)
+
+    -- Reader first: ffplay blocks on open until the writer appears.
+    local ok_p, player = pcall(hs.task.new, FFPLAY_PATH, function(exitCode)
+        M._player = nil
+        -- Completion is driven by whichever task finishes last; if the
+        -- writer already finished, this is the final signal.
+        if M._chunks and M._generator == nil then
+            _on_chunk_done(exitCode == 0, "ffplay exited with " .. tostring(exitCode))
+        end
+    end, { "-nodisp", "-autoexit", "-loglevel", "error", fifo })
+    if not ok_p or not player then
+        _on_chunk_done(false, "ffplay could not start")
+        return
+    end
+    M._player = player
+    player:start()
+
+    local args = {
+        "--voice", _pick_voice(text),
+        "--rate", M._rate,
+        "--volume", M._volume,
+        "--pitch", M._pitch,
+        "--text", text,
+        "--write-media", fifo,
+    }
+    local ok_g, gen = pcall(hs.task.new, EDGE_TTS_PATH, function(exitCode)
+        M._generator = nil
+        if exitCode ~= 0 then
+            _on_chunk_done(false, "edge-tts exited with " .. tostring(exitCode))
+        elseif M._player == nil then
+            -- Very short chunk: player already drained and exited.
+            _on_chunk_done(true)
+        end
+        -- Otherwise wait for ffplay to drain; its callback completes.
+    end, args)
+    if not ok_g or not gen then
+        _on_chunk_done(false, "edge-tts could not start")
+        return
+    end
+    M._generator = gen
+    gen:start()
+end
+
+-- ===== File pipeline mode (fallback when ffplay is unavailable) =====
 
 local function _pump()
     if M._player then return end
@@ -331,11 +446,19 @@ function M.speak(text)
     end
 
     M._chunks = M.chunk_text(text)
-    M._gen_idx = 1
-    M._playlist = {}
     M._all_files = {}
-    M._generating_done = false
-    _generate_next()
+
+    if _ffplay_available() then
+        -- Streaming mode: playback starts while each chunk is generated
+        M._cur_idx = 1
+        _stream_chunk(1)
+    else
+        -- File pipeline mode
+        M._gen_idx = 1
+        M._playlist = {}
+        M._generating_done = false
+        _generate_next()
+    end
 end
 
 -- Speak text with temporary overrides (used by the settings panel test

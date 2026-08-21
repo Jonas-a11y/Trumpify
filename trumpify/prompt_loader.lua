@@ -105,7 +105,7 @@ local function load_from_embedded()
     if ok and prompts and prompts.modes then
         local modes = {}
         for key, mode in pairs(prompts.modes) do
-            local validate_ok, err = validate_mode(key, mode)
+            local validate_ok = validate_mode(key, mode)
             if validate_ok then
                 modes[key] = mode
             end

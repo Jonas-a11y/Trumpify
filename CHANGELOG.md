@@ -5,6 +5,8 @@ All notable changes to Trumpify will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- History browser (`⌃⌥H` or chooser entry): browse the last 5 transformations and copy, paste or read them aloud
+- Streaming TTS playback via `ffplay` + named pipe: audio starts while text is still being generated (falls back to file-based playback without ffmpeg)
 - Settings panel (accessible via chooser entry "Settings"):
   - TTS voice/rate/volume/pitch configuration with voice test button
   - Per-mode keyboard shortcut editing with live collision validation
