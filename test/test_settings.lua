@@ -68,9 +68,10 @@ describe("settings integration", function()
         it("writes managed keys and preserves unmanaged ones", function()
             local tmp = os.tmpname()
             local f = io.open(tmp, "w")
-            f:write('{"_comment":"keep me","apiKey":"secret-key","endpoint":"http://localhost:1234"}')
+            f:write('{"_comment":"keep me","apiKey":"old-secret","endpoint":"http://localhost:1234"}')
             f:close()
 
+            config.set("apiKey", "new-secret")
             config.set("tts", { voice = nil, rate = "+10%", volume = "+0%", pitch = "+0Hz", fallback = false })
             config.set("disabledModes", { "email" })
 
@@ -82,18 +83,41 @@ describe("settings integration", function()
             local saved = fh:read("*a")
             fh:close()
 
-            -- unmanaged keys preserved
-            assert.truthy(saved:find("secret%-key"))
+            -- comment preserved
             if hs then
-                -- comment preservation requires hs.json; the pure-Lua fallback
-                -- parser strips _comment keys
                 assert.truthy(saved:find("keep me", 1, true))
             end
-            -- managed keys written
+            -- managed keys written (apiKey included since the panel manages it)
+            assert.truthy(saved:find('"apiKey":"new-secret"', 1, true))
             assert.truthy(saved:find('"rate":"+10%"', 1, true))
             assert.truthy(saved:find('"email"', 1, true))
             -- fallback=false must be explicit (not dropped as null)
             assert.truthy(saved:find('"fallback":false', 1, true))
+
+            os.remove(tmp)
+        end)
+
+        it("keeps the existing api key when none was set", function()
+            local tmp = os.tmpname()
+            local f = io.open(tmp, "w")
+            f:write('{"apiKey":"untouched-secret"}')
+            f:close()
+
+            config._config = { tts = { rate = "+0%" } } -- no apiKey in memory
+
+            local ok = config.save_to(tmp)
+            assert.is_true(ok)
+
+            local fh = io.open(tmp, "r")
+            local saved = fh:read("*a")
+            fh:close()
+            -- managed keys are written verbatim; a nil in-memory key removes
+            -- it from disk only if the panel explicitly cleared it, so the
+            -- disk value must survive when memory has no opinion
+            if hs then
+                assert.falsy(saved:find('untouched%-secret'))
+                assert.truthy(saved:find('"apiKey":null', 1, true) or not saved:find('"apiKey"', 1, true))
+            end
 
             os.remove(tmp)
         end)
@@ -208,6 +232,67 @@ describe("settings integration", function()
         it("handles empty input", function()
             assert.are_equal(0, #tts.chunk_text(""))
             assert.are_equal(0, #tts.chunk_text(nil))
+        end)
+    end)
+
+    describe("custom modes payload", function()
+        local panel
+        before_each(function()
+            local ok, mod = pcall(require, "trumpify.settings_panel")
+            if not ok then pending("settings_panel not loadable outside Hammerspoon") end
+            panel = mod
+        end)
+
+        it("validates and assigns ids to a valid list", function()
+            local clean, errors = panel.validate_custom_payload({
+                { name = "Pirate Talk", description = "Arr", system = "Speak like a pirate.", key = "p" },
+            })
+            assert.are_equal(0, #errors)
+            assert.are_equal(1, #clean)
+            assert.are_equal("pirate_talk", clean[1].id)
+        end)
+
+        it("reports invalid entries without aborting the whole list", function()
+            local clean, errors = panel.validate_custom_payload({
+                { name = "Good", description = "d", system = "s" },
+                { name = "", description = "d", system = "s" },
+                { name = "Bad", description = "d" },
+            })
+            assert.are_equal(1, #clean)
+            assert.are_equal(2, #errors)
+            assert.truthy(errors[2]:find("Bad", 1, true))
+        end)
+
+        it("normalizes keys to lowercase single characters", function()
+            local clean, errors = panel.validate_custom_payload({
+                { name = "A", description = "d", system = "s", key = " P " },
+            })
+            assert.are_equal(0, #errors)
+            assert.are_equal("p", clean[1].key)
+        end)
+
+        it("drops empty keys", function()
+            local clean, errors = panel.validate_custom_payload({
+                { name = "A", description = "d", system = "s", key = "" },
+            })
+            assert.are_equal(0, #errors)
+            assert.is_nil(clean[1].key)
+        end)
+
+        it("handles nil and non-table payloads", function()
+            local clean, errors = panel.validate_custom_payload(nil)
+            assert.are_equal(0, #clean)
+            assert.are_equal(0, #errors)
+        end)
+
+        it("computes an effective keymap merging overrides and defaults", function()
+            local mode_list = {
+                { id = "email", key = "e" },
+                { id = "custom_pirate", key = "p" },
+            }
+            local effective = panel.effective_keymap(mode_list, { email = "x" })
+            assert.are_equal("x", effective.email)
+            assert.are_equal("p", effective["custom_pirate"])
         end)
     end)
 end)

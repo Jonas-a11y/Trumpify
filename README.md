@@ -11,20 +11,16 @@ A macOS text transformation tool powered by Hammerspoon and Claude. Highlight te
 
 ## Installation
 
-1. **Clone this repo:**
+1. **Clone this repo** to a location of your choice, e.g. `~/Documents/GitHub/Trumpify`.
 
-   ```bash
-   git clone https://github.com/YOUR_USER/Trumpify.git ~/Documents/GitHub/Trumpify
-   ```
-
-2. **Configure your API key** using one of these methods:
-   - **Config file**: Copy `config.example.json` to `~/.config/trumpify/config.json` and add your key:
+2. **Configure your API key** — the easiest way is directly in the app: after starting Trumpify without a key you'll get a hint; open the Settings panel (`⌃⌥Space` → **Settings**) and enter it under **Advanced → API Key**. Alternatively use one of these methods:
+   - **User config file**: Copy `config.example.json` to `~/.config/trumpify/config.json` and add your key:
      ```json
      {
          "apiKey": "your-api-key-here"
      }
      ```
-   - **.env file**: Create `.env` in the project root:
+   - **.env file**: Copy `.env.example` to `.env` in the project root:
      ```
      HAIPROXY_API_KEY=your-api-key-here
      ```
@@ -37,14 +33,15 @@ A macOS text transformation tool powered by Hammerspoon and Claude. Highlight te
    require("hs.ipc")
 
    -- Load Trumpify
+   local trumpify_home = os.getenv("HOME") .. "/Documents/GitHub/Trumpify"
    package.path = package.path
-       .. ";/Users/YOUR_USER/Documents/GitHub/Trumpify/?.lua"
-       .. ";/Users/YOUR_USER/Documents/GitHub/Trumpify/?/init.lua"
+       .. ";" .. trumpify_home .. "/?.lua"
+       .. ";" .. trumpify_home .. "/?/init.lua"
 
    require("trumpify")
    ```
 
-   Replace `YOUR_USER` with your macOS username.
+   Adjust `trumpify_home` if you cloned the repo somewhere else.
 
 4. **Grant Accessibility permissions** to Hammerspoon:
    System Settings → Privacy & Security → Accessibility → enable Hammerspoon
@@ -76,6 +73,7 @@ All shortcuts use **Ctrl + Option** (`⌃⌥`) as the base modifier.
 | `⌃⌥G` | Fix Grammar | Fixes spelling and grammar, keeps the tone |
 | `⌃⌥A` | Reply | Auto-generates a reply matching the message style |
 | `⌃⌥Q` | Reply (guided) | Writes a reply using your own talking points |
+| `⌃⌥V` | Translate | Detects the language and translates (target configurable in Settings) |
 | `⌃⌥M` | Read Aloud | Reads the selected text aloud (Edge neural voice) |
 | `⌃⌥Y` | Summarize & Speak | Summarizes and reads the summary aloud |
 | `⌃⌥.` | Stop TTS | Stops current speech playback |
@@ -104,7 +102,7 @@ Voice, rate, volume and pitch can be changed in the Settings panel.
 
 ## History
 
-Every transformation is kept in a ring buffer (last 5 results). Press `⌃⌥H` or choose **History** in the chooser to browse them and pick an action:
+Every transformation is kept in a ring buffer (last 20 results). Press `⌃⌥H` or choose **History** in the chooser to browse them and pick an action:
 
 - **Copy** — copy the result back to the clipboard
 - **Paste** — paste it at the cursor position
@@ -117,7 +115,8 @@ Open via the chooser (`⌃⌥Space` → **Settings**):
 - **Text-to-Speech**: voice selection (with test button), rate/volume/pitch sliders, macOS fallback toggle
 - **Shortcuts**: per-mode hotkey editing with live collision validation
 - **Modes**: enable/disable individual modes
-- **Advanced**: API endpoint, model, max tokens
+- **Custom Modes**: create your own transformations — name, description, hotkey and system prompt, no code or reload required
+- **Advanced**: API endpoint, model, max tokens, **API key** (stored masked; only the last 4 characters are shown) and the translation target language for the Translate mode
 - **Reset to Defaults**: restores all settings (applied after clicking Save)
 
 Changes take effect immediately — no Hammerspoon reload required.
@@ -155,15 +154,29 @@ See `config.example.json` for all options:
         "pitch": "+0Hz",
         "fallback": true
     },
-    "disabledModes": []
+    "disabledModes": [],
+    "translate": {
+        "target": ""
+    }
 }
 ```
 
 - `keymap` — customize keyboard shortcuts for any mode (lowercase letters)
 - `tts` — text-to-speech settings; `voice: null` enables automatic language detection
 - `disabledModes` — mode IDs listed here are hidden from hotkeys and the chooser
+- `translate.target` — target language for the Translate mode; empty means auto (German → English, everything else → German)
 
-All of these can also be edited in the Settings panel, which writes back to the project `config.json` (your `apiKey` is never touched by the panel).
+All of these can also be edited in the Settings panel, which writes back to `~/.config/trumpify/config.json`. Custom modes are stored separately in `~/.config/trumpify/custom_modes.json`.
+
+## Custom modes
+
+Besides creating prompt files by hand (see below), you can define your own transformations directly in the Settings panel (`⌃⌥Space` → **Settings** → **Custom Modes**):
+
+1. Click **+ Add Custom Mode**
+2. Fill in name, description, an optional hotkey and the system prompt
+3. Click **Save**, then **Save** in the panel footer — the new mode is immediately available via hotkey and chooser
+
+Custom modes are validated like built-ins: names and hotkeys must be unique, invalid entries are reported without breaking anything.
 
 ## Adding a new mode
 
@@ -210,6 +223,7 @@ Trumpify/
 │   ├── history.lua         Ring buffer of recent transformations
 │   ├── history_browser.lua Chooser UI to reuse past results
 │   ├── prompt_loader.lua   Dynamic prompt loader with validation + fallback
+│   ├── custom_modes.lua    User-defined modes (JSON in ~/.config/trumpify)
 │   ├── tts.lua             Text-to-speech via edge-tts with streaming playback
 │   ├── settings_panel.lua  Webview-based settings UI (voice/keys/modes/API)
 │   └── prompts.lua         Embedded prompt definitions (fallback)

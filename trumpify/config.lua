@@ -160,8 +160,8 @@ function M.get_all()
 end
 
 -- Keys managed by the settings panel; only these are written back on save.
--- apiKey is deliberately NOT managed (never rewritten by the panel).
-local MANAGED_KEYS = { "tts", "keymap", "disabledModes", "endpoint", "model", "maxTokens" }
+local MANAGED_KEYS = { "tts", "keymap", "disabledModes", "endpoint", "model",
+    "maxTokens", "apiKey", "translate" }
 
 function M.set(key, value)
     if _config == nil then

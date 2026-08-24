@@ -1,5 +1,6 @@
 local config = require("trumpify.config")
 local constants = require("trumpify.constants")
+local custom_modes = require("trumpify.custom_modes")
 local prompt_loader = require("trumpify.prompt_loader")
 local tts = require("trumpify.tts")
 local ui = require("trumpify.ui")
@@ -71,6 +72,46 @@ local function _push_js(fn, data)
     pcall(function() M._webview:evaluateJavaScript(js) end)
 end
 
+-- Pure: validate and normalize a custom modes payload from the panel.
+-- Returns the cleaned list (with assigned ids) and an error array.
+function M.validate_custom_payload(list)
+    local clean = {}
+    local errors = {}
+    if type(list) ~= "table" then return clean, errors end
+
+    for _, mode in ipairs(list) do
+        if type(mode) == "table" then
+            -- Trim name; normalize key to a single lowercase char (or nil)
+            if type(mode.name) == "string" then
+                mode.name = mode.name:match("^%s*(.-)%s*$")
+            end
+            if type(mode.key) == "string" then
+                local k = mode.key:match("^%s*(.-)%s*$")
+                mode.key = (#k == 1) and k:lower() or nil
+            end
+
+            local ok, err = custom_modes.validate(mode)
+            if not ok then
+                table.insert(errors, tostring(err))
+            else
+                table.insert(clean, mode)
+            end
+        end
+    end
+
+    clean = custom_modes.assign_ids(clean)
+    return clean, errors
+end
+
+-- Pure: merge hotkey overrides with per-mode default keys.
+function M.effective_keymap(mode_list, keymap)
+    local effective = {}
+    for _, m in ipairs(mode_list or {}) do
+        effective[m.id] = (keymap and keymap[m.id]) or m.key
+    end
+    return effective
+end
+
 local function _sorted_modes()
     local modes = prompt_loader.get_all_modes()
     local list = {}
@@ -79,6 +120,24 @@ local function _sorted_modes()
     end
     table.sort(list, function(a, b) return a.id < b.id end)
     return list
+end
+
+-- Built-in modes only (customs come from the panel payload, which carries the
+-- authoritative full list and may include not-yet-saved entries).
+local function _sorted_builtin_modes()
+    local list = {}
+    for _, m in ipairs(_sorted_modes()) do
+        if not m.id:match("^custom_") then
+            table.insert(list, m)
+        end
+    end
+    return list
+end
+
+-- Mask an API key for display: only the last 4 characters stay readable.
+function M._mask_api_key(key)
+    if type(key) ~= "string" or #key < 8 then return "" end
+    return "••••" .. key:sub(-4)
 end
 
 local function _pct_num(value)
@@ -105,14 +164,27 @@ local function _handle_save(data)
     local keymap = payload.keymap or {}
     local disabled = payload.disabled or {}
     local advanced = payload.advanced or {}
+    local translate_cfg = payload.translate or {}
+
+    -- Custom modes: validate/normalize before any collision checks
+    local customs, custom_errors = M.validate_custom_payload(payload.custom or {})
 
     local mode_list = {}
-    for _, m in ipairs(_sorted_modes()) do
+    for _, m in ipairs(_sorted_builtin_modes()) do
         table.insert(mode_list, { id = m.id, key = m.key })
+    end
+    for _, m in ipairs(customs) do
+        table.insert(mode_list, { id = "custom_" .. m.id, key = m.key })
     end
 
     local hotkeys = require("trumpify.hotkeys")
-    local errors = M.validate_keymap(mode_list, keymap, hotkeys.get_reserved_keys())
+    -- Validate ALL effective keys (overrides + defaults), so a new custom
+    -- mode's hotkey cannot silently collide with anything.
+    local errors = M.validate_keymap(mode_list, M.effective_keymap(mode_list, keymap),
+        hotkeys.get_reserved_keys())
+    for _, err in ipairs(custom_errors) do
+        table.insert(errors, err)
+    end
     if #errors > 0 then
         _push_js("showErrors", errors)
         return
@@ -162,11 +234,33 @@ local function _handle_save(data)
     config.set("model", model)
     config.set("maxTokens", max_tokens)
 
-    local ok, err = config.save()
+    -- Translation target (empty = auto German/English)
+    local target = tostring(translate_cfg.target or "")
+    config.set("translate", { target = target })
+
+    -- API key: only update when the user typed a new one (the masked
+    -- placeholder is sent back unchanged otherwise).
+    local submitted_key = tostring(advanced.apiKey or "")
+    if submitted_key ~= "" and submitted_key ~= M._mask_api_key(config.get("apiKey")) then
+        config.set("apiKey", submitted_key)
+    end
+
+    -- Persist settings to the USER config file (~/.config/trumpify), keeping
+    -- secrets out of the project directory.
+    local ok, err = config.save_to(constants.get_config_dir() .. "/" .. constants.CONFIG_FILE_NAME)
     if not ok then
         _push_js("showErrors", { "Could not save config: " .. tostring(err) })
         return
     end
+
+    -- Persist custom modes, then reload prompts so new modes get hotkeys.
+    local ok_customs, err_customs = custom_modes.save(nil, customs)
+    if not ok_customs then
+        _push_js("showErrors", { "Could not save custom modes: " .. tostring(err_customs) })
+        return
+    end
+
+    prompt_loader.init()
 
     if M._deps.on_apply then
         pcall(M._deps.on_apply)
@@ -243,7 +337,11 @@ function M._build_html()
         endpoint = config.get("endpoint") or defaults.endpoint,
         model = config.get("model") or defaults.model,
         maxTokens = tonumber(config.get("maxTokens")) or defaults.maxTokens,
+        apiKeyMasked = M._mask_api_key(config.get("apiKey")),
     }
+
+    local translate_cfg = config.get("translate")
+    if type(translate_cfg) ~= "table" then translate_cfg = {} end
 
     local hotkeys = require("trumpify.hotkeys")
     local reserved = hotkeys.get_reserved_keys()
@@ -270,6 +368,8 @@ function M._build_html()
             fallback = (tts_cfg.fallback == nil) and true or tts_cfg.fallback and true or false,
         },
         advanced = advanced,
+        custom = custom_modes.load(),
+        translate = { target = translate_cfg.target or "" },
         defaults = {
             endpoint = defaults.endpoint,
             model = defaults.model,
@@ -278,10 +378,21 @@ function M._build_html()
         fallbackVoices = FALLBACK_VOICES,
     }
 
-    local ok, state_json = pcall(hs.json.encode, state)
-    if not ok or not state_json then
-        state_json = "{}"
+    -- Encode the embedded state: prefer hs.json, fall back to dkjson so the
+    -- HTML builder stays usable outside Hammerspoon (e.g. in tests).
+    local state_json = nil
+    if hs and hs.json and hs.json.encode then
+        local ok, encoded = pcall(hs.json.encode, state)
+        if ok and encoded then state_json = encoded end
     end
+    if not state_json then
+        local has_dkjson, dkjson = pcall(require, "dkjson")
+        if has_dkjson and dkjson and dkjson.encode then
+            local ok, encoded = pcall(dkjson.encode, state)
+            if ok and encoded then state_json = encoded end
+        end
+    end
+    state_json = state_json or "{}"
     state_json = state_json:gsub("</", "<\\/")
 
     return [==[<!DOCTYPE html>
@@ -465,6 +576,90 @@ window.__STATE__ = ]==] .. state_json .. [==[;
   });
   content.appendChild(modesGrid);
 
+  // ---- Custom Modes section ----
+  section('Custom Modes');
+  var customList = (S.custom || []).slice();
+  var customDiv = el('div');
+  content.appendChild(customDiv);
+
+  var formWrap = el('div', {style: 'display:none; border:1px solid #444; border-radius:6px; padding:10px; margin-top:8px;'});
+  var cmName = el('input', {type: 'text', style: 'flex:1; width:auto; text-transform:none;', placeholder: 'Mode name'});
+  var cmDesc = el('input', {type: 'text', style: 'flex:1; width:auto; text-transform:none;', placeholder: 'Short description'});
+  var cmKey = el('input', {type: 'text', maxlength: '1', style: 'width:46px;', placeholder: 'Key'});
+  var cmSystem = el('textarea', {style: 'width:100%; min-height:90px; background:#2a2a2a; color:#e0e0e0; border:1px solid #444; border-radius:5px; font-family:inherit; font-size:12px;', placeholder: 'System prompt: instruct how the selected text should be transformed.'});
+  var editIndex = -1;
+
+  function openCustomForm(i) {
+    editIndex = i;
+    var c = i >= 0 ? customList[i] : {};
+    cmName.value = c.name || '';
+    cmDesc.value = c.description || '';
+    cmKey.value = c.key || '';
+    cmSystem.value = c.system || '';
+    formWrap.style.display = 'block';
+  }
+  function closeCustomForm() {
+    formWrap.style.display = 'none';
+    editIndex = -1;
+  }
+
+  var cmSave = el('button', {class: 'primary'}, 'Save Mode');
+  cmSave.addEventListener('click', function() {
+    if (!cmName.value.trim() || !cmDesc.value.trim() || !cmSystem.value.trim()) {
+      document.getElementById('errors').textContent = 'Name, description and system prompt are required.';
+      return;
+    }
+    var entry = {
+      name: cmName.value.trim(),
+      description: cmDesc.value.trim(),
+      key: cmKey.value.trim().toLowerCase(),
+      system: cmSystem.value
+    };
+    if (!entry.key) delete entry.key;
+    if (editIndex >= 0) customList[editIndex] = entry;
+    else customList.push(entry);
+    closeCustomForm();
+    renderCustoms();
+    document.getElementById('errors').textContent = '';
+  });
+  var cmCancel = el('button', null, 'Cancel');
+  cmCancel.addEventListener('click', closeCustomForm);
+  var formButtons = el('div', {style: 'display:flex; gap:8px; justify-content:flex-end; margin-top:6px;'});
+  formButtons.appendChild(cmSave);
+  formButtons.appendChild(cmCancel);
+
+  formWrap.appendChild(row('Name', cmName));
+  formWrap.appendChild(row('Description', cmDesc));
+  formWrap.appendChild(row('Hotkey (Ctrl+Option + …)', cmKey));
+  formWrap.appendChild(el('div', {style:'margin-top:6px'}, null)).appendChild(cmSystem);
+  formWrap.appendChild(formButtons);
+  content.appendChild(formWrap);
+
+  function renderCustoms() {
+    customDiv.innerHTML = '';
+    customList.forEach(function(c, i) {
+      var r = el('div', {class: 'row'});
+      r.appendChild(el('label', {class: 'main'},
+        c.name + (c.key ? ' (⌃⌥' + c.key.toUpperCase() + ')' : '')));
+      r.appendChild(el('span', {class: 'hint'}, c.description));
+      var editB = el('button', null, 'Edit');
+      editB.addEventListener('click', function() { openCustomForm(i); });
+      var delB = el('button', null, 'Delete');
+      delB.addEventListener('click', function() {
+        customList.splice(i, 1);
+        renderCustoms();
+      });
+      r.appendChild(editB);
+      r.appendChild(delB);
+      customDiv.appendChild(r);
+    });
+    var addB = el('button', null, '+ Add Custom Mode');
+    addB.style.marginTop = '4px';
+    addB.addEventListener('click', function() { openCustomForm(-1); });
+    customDiv.appendChild(addB);
+  }
+  renderCustoms();
+
   // ---- Advanced section ----
   section('Advanced (API)');
   var endpointInput = el('input', {type: 'text', id: 'adv-endpoint', style: 'flex:1; width:auto; text-transform:none;'});
@@ -478,6 +673,16 @@ window.__STATE__ = ]==] .. state_json .. [==[;
   var maxTokensInput = el('input', {type: 'text', id: 'adv-maxtokens', style: 'width:90px; text-transform:none;'});
   maxTokensInput.value = S.advanced.maxTokens;
   content.appendChild(row('Max Tokens', maxTokensInput));
+
+  var apiKeyInput = el('input', {type: 'password', id: 'adv-apikey', style: 'flex:1; width:auto; text-transform:none;'});
+  apiKeyInput.value = S.advanced.apiKeyMasked || '';
+  if (!S.advanced.apiKeyMasked) apiKeyInput.placeholder = 'No key configured - paste your API key here';
+  content.appendChild(row('API Key', apiKeyInput, (S.advanced.apiKeyMasked ? 'stored (last 4 shown)' : '')));
+
+  var translateInput = el('input', {type: 'text', id: 'adv-translate', style: 'flex:1; width:auto; text-transform:none;'});
+  translateInput.value = S.translate.target;
+  translateInput.placeholder = 'Auto (German ↔ English)';
+  content.appendChild(row('Translate Target', translateInput, 'empty = auto'));
 
   // ---- collect / validate / post ----
   function collectTts() {
@@ -508,8 +713,14 @@ window.__STATE__ = ]==] .. state_json .. [==[;
     return {
       endpoint: endpointInput.value.trim(),
       model: modelInput.value.trim(),
-      maxTokens: parseInt(maxTokensInput.value, 10) || 0
+      maxTokens: parseInt(maxTokensInput.value, 10) || 0,
+      apiKey: apiKeyInput.value,
+      translateTarget: translateInput.value.trim()
     };
+  }
+
+  function collectCustoms() {
+    return customList;
   }
 
   function validateAdvanced(adv) {
@@ -582,7 +793,9 @@ window.__STATE__ = ]==] .. state_json .. [==[;
       tts: collectTts(),
       keymap: collectKeymap(),
       disabled: collectDisabled(),
-      advanced: collectAdvanced()
+      advanced: collectAdvanced(),
+      custom: collectCustoms(),
+      translate: { target: collectAdvanced().translateTarget }
     } });
   });
 
@@ -605,6 +818,8 @@ window.__STATE__ = ]==] .. state_json .. [==[;
     endpointInput.value = S.defaults.endpoint;
     modelInput.value = S.defaults.model;
     maxTokensInput.value = S.defaults.maxTokens;
+    apiKeyInput.value = '';
+    translateInput.value = '';
     endpointInput.classList.remove('invalid');
     modelInput.classList.remove('invalid');
     maxTokensInput.classList.remove('invalid');

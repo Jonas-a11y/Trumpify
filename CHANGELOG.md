@@ -5,7 +5,20 @@ All notable changes to Trumpify will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- History browser (`⌃⌥H` or chooser entry): browse the last 5 transformations and copy, paste or read them aloud
+- Custom Modes: create, edit and delete user-defined transformations directly in the settings panel (name, description, hotkey, system prompt); stored in `~/.config/trumpify/custom_modes.json`, live-reloaded without Hammerspoon restart
+- Translate mode (`⌃⌥V`): auto language detection (German → English, everything else → German); target language configurable in the settings panel, mode can be disabled like any other
+- API key can be entered in the settings panel (Advanced section, masked display showing only the last 4 characters)
+- Onboarding hint when no API key is configured, pointing at the settings panel
+- `.env.example` template for API key configuration
+
+### Changed
+- Settings are now written to `~/.config/trumpify/config.json` instead of the project-level `config.json` (keeps secrets out of the repository directory)
+- History ring buffer extended from 5 to 20 entries
+- Hotkey collision validation now checks all effective keys (overrides and per-mode defaults), not just overrides
+- README: replaced placeholder install paths with a dynamic snippet; documented new features and config options
+
+### Added
+- History browser (`⌃⌥H` or chooser entry): browse recent transformations and copy, paste or read them aloud
 - Streaming TTS playback via `ffplay` + named pipe: audio starts while text is still being generated (falls back to file-based playback without ffmpeg)
 - Settings panel (accessible via chooser entry "Settings"):
   - TTS voice/rate/volume/pitch configuration with voice test button

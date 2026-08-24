@@ -84,7 +84,7 @@ M.PASTE_DELAY = 15000             -- 15ms before paste
 M.PASTE_VERIFY_DELAY = 50000      -- 50ms before verifying paste
 
 -- History
-M.MAX_HISTORY_ENTRIES = 5
+M.MAX_HISTORY_ENTRIES = 20
 
 -- Config file paths
 M.CONFIG_DIR_NAME = "trumpify"
@@ -92,6 +92,9 @@ M.CONFIG_FILE_NAME = "config.json"
 
 -- Prompt directories
 M.PROMPTS_DIR_NAME = "prompts"
+
+-- Custom modes file (stored in the user config dir)
+M.CUSTOM_MODES_FILE_NAME = "custom_modes.json"
 
 -- Message durations (seconds)
 M.DURATIONS = {

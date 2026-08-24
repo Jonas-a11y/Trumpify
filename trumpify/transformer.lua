@@ -1,4 +1,5 @@
 local constants = require("trumpify.constants")
+local config = require("trumpify.config")
 local ui = require("trumpify.ui")
 local selection = require("trumpify.selection")
 local api = require("trumpify.api")
@@ -8,6 +9,28 @@ local tts = require("trumpify.tts")
 local M = {}
 
 local _initialized = false
+
+local AUTO_TARGET_LANGUAGE =
+    "German if the text is German, otherwise English (detect the source language first)"
+
+--- Resolve a mode's system prompt. Supports the {target_language} placeholder,
+--- which is replaced with the configured translation target
+--- (config key "translate" -> { target = "..." }).
+function M.build_system(mode)
+    local system = mode.system
+    if type(system) ~= "string" or not system:find("{target_language}", 1, true) then
+        return system
+    end
+
+    local target = nil
+    local translate_cfg = config.get("translate")
+    if type(translate_cfg) == "table" and type(translate_cfg.target) == "string" then
+        local trimmed = translate_cfg.target:match("^%s*(.-)%s*$")
+        if trimmed ~= "" then target = trimmed end
+    end
+
+    return system:gsub("{target_language}", target or AUTO_TARGET_LANGUAGE)
+end
 
 function M.init()
     _initialized = true
@@ -27,7 +50,7 @@ function M.execute_transform(mode, text, clipboard_only)
 
     local processing_alert = ui.show_processing(label)
 
-    api.transform(text, mode.system, function(success, result)
+    api.transform(text, M.build_system(mode), function(success, result)
         ui.close_processing(processing_alert)
 
         if not success then

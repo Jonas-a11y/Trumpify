@@ -2,12 +2,13 @@
 -- Run with: busted .
 
 describe("history", function()
-    local history
+    local history, constants
 
     before_each(function()
         local ok, mod = pcall(require, "trumpify.history")
         if not ok then pending("history not loadable") end
         history = mod
+        constants = require("trumpify.constants")
         history.clear()
     end)
 
@@ -34,14 +35,14 @@ describe("history", function()
     end)
 
     it("evicts the oldest entry beyond the limit", function()
-        for i = 1, 8 do
+        for i = 1, constants.MAX_HISTORY_ENTRIES + 3 do
             history.add("Mode" .. i, "in", "out")
         end
         local all = history.get_all()
-        assert.are_equal(5, #all)
-        -- newest five kept: Mode8..Mode4
-        assert.are_equal("Mode8", all[1].mode)
-        assert.are_equal("Mode4", all[5].mode)
+        assert.are_equal(constants.MAX_HISTORY_ENTRIES, #all)
+        -- newest entries kept, oldest evicted
+        assert.are_equal("Mode" .. (constants.MAX_HISTORY_ENTRIES + 3), all[1].mode)
+        assert.are_equal("Mode4", all[constants.MAX_HISTORY_ENTRIES].mode)
     end)
 
     it("clear() empties the buffer", function()

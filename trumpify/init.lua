@@ -9,18 +9,16 @@ local settings_panel = require("trumpify.settings_panel")
 
 config.init()
 
-local project_dir = constants.get_project_dir()
 local api_key = config.get("apiKey")
 
 if api_key then
     ui.show_notification(constants.NOTIFICATIONS.LOADED)
 else
+    -- Onboarding hint: point users at the settings panel where the key can
+    -- be entered directly (Ctrl+Alt+Space -> Settings -> Advanced).
     ui.show_error(
-        "API key not found. Checked:\n" ..
-        "- " .. constants.get_config_dir() .. "/config.json\n" ..
-        "- " .. project_dir .. "/config.json\n" ..
-        "- " .. project_dir .. "/.env\n" ..
-        "- $HAIPROXY_API_KEY"
+        "API key not found. Open Settings (⌃⌥Space → Settings) and enter it under Advanced.\n" ..
+        "Alternatively set it in ~/.config/trumpify/config.json, project config.json, .env or $HAIPROXY_API_KEY."
     )
 end
 

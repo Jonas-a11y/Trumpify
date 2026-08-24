@@ -121,23 +121,42 @@ function M.init()
     local project_dir = constants.get_project_dir()
     local prompts_dir = project_dir .. "/" .. constants.PROMPTS_DIR_NAME
 
+    local errors = {}
+
     local dir_modes, dir_errors = load_from_dir(prompts_dir)
     if dir_modes then
         _modes = dir_modes
         _loaded_from = "directory"
-        return dir_errors
+        if dir_errors then
+            for _, err in ipairs(dir_errors) do
+                table.insert(errors, err)
+            end
+        end
+    else
+        local embedded_modes = load_from_embedded()
+        if embedded_modes then
+            _modes = embedded_modes
+            _loaded_from = "embedded"
+        else
+            _modes = {}
+            _loaded_from = "none"
+            table.insert(errors,
+                "No prompts found in '" .. prompts_dir .. "' or embedded prompts.lua")
+        end
     end
 
-    local embedded_modes = load_from_embedded()
-    if embedded_modes then
-        _modes = embedded_modes
-        _loaded_from = "embedded"
-        return nil
+    -- Merge user-defined custom modes on top of the built-ins
+    local ok_custom, custom_modes = pcall(require, "trumpify.custom_modes")
+    if ok_custom and custom_modes then
+        local list = custom_modes.load()
+        local merged, merge_errors = custom_modes.merge(_modes, list)
+        for _, err in ipairs(merge_errors) do
+            table.insert(errors, err)
+        end
+        _modes = merged
     end
 
-    _modes = {}
-    _loaded_from = "none"
-    return { "No prompts found in '" .. prompts_dir .. "' or embedded prompts.lua" }
+    return errors
 end
 
 function M.get_modes()
