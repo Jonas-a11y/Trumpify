@@ -16,10 +16,15 @@ jobs:
         run: brew install lua
 
       - name: Install luacheck
-        run: brew install luacheck || luarocks install luacheck
+        run: |
+          brew install luacheck || luarocks install luacheck
+          brew install shellcheck
 
       - name: Run luacheck
         run: luacheck trumpify/ prompts/
+
+      - name: Run shellcheck
+        run: shellcheck setup.sh test/test_setup.sh
 
   test:
     runs-on: macos-latest
@@ -35,4 +40,6 @@ jobs:
           luarocks install busted
 
       - name: Run tests
-        run: busted .
+        run: |
+          busted .
+          bash test/test_setup.sh

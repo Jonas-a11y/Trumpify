@@ -5,6 +5,8 @@ All notable changes to Trumpify will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Interactive setup wizard for provider selection, API verification, secure local configuration and idempotent Hammerspoon integration
+- Non-interactive wizard mode for automated installation and testing
 - Custom Modes: create, edit and delete user-defined transformations directly in the settings panel (name, description, hotkey, system prompt); stored in `~/.config/trumpify/custom_modes.json`, live-reloaded without Hammerspoon restart
 - Translate mode (`⌃⌥V`): auto language detection (German → English, everything else → German); target language configurable in the settings panel, mode can be disabled like any other
 - API key can be entered in the settings panel (Advanced section, masked display showing only the last 4 characters)

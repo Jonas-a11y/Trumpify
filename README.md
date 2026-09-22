@@ -11,7 +11,28 @@ A macOS text transformation tool powered by Hammerspoon and an OpenAI-compatible
 - **[OpenRouter](https://openrouter.ai/) API key** — or another OpenAI-compatible chat-completions endpoint
 - **edge-tts** (optional, for high-quality text-to-speech) — `pip install edge-tts` or `pipx install edge-tts`. Without it, TTS falls back to the built-in macOS voice.
 
-## Installation
+## Setup wizard
+
+Run the interactive wizard from the repository root:
+
+```bash
+./setup.sh
+```
+
+It can install Hammerspoon through Homebrew, configure OpenRouter or a custom OpenAI-compatible endpoint, test the selected model, write the local API configuration with restricted permissions, connect Trumpify to Hammerspoon and reload it. Running the wizard again updates its managed Hammerspoon block without creating duplicates and preserves unrelated Trumpify settings.
+
+For automation, pass the API key through an environment variable rather than a command-line argument:
+
+```bash
+TRUMPIFY_API_KEY=... ./setup.sh --non-interactive \
+  --provider custom \
+  --endpoint http://localhost:1234/v1 \
+  --model gpt-5-mini
+```
+
+Use `./setup.sh --help` for all options.
+
+## Manual installation
 
 1. **Clone this repo** to a location of your choice, e.g. `~/Documents/GitHub/Trumpify`.
 
@@ -216,6 +237,7 @@ Set `key = nil` to register the mode only in the chooser menu, without a dedicat
 
 ```
 Trumpify/
+├── setup.sh               Interactive and non-interactive setup wizard
 ├── trumpify/
 │   ├── init.lua            Entry point — loads and initializes all modules
 │   ├── constants.lua       Centralized values, paths, and timing
@@ -251,6 +273,7 @@ luarocks install busted
 
 # Run tests
 busted .
+bash test/test_setup.sh
 
 # Lint
 luacheck trumpify/ prompts/
