@@ -1,12 +1,14 @@
 # Trumpify
 
-A macOS text transformation tool powered by Hammerspoon and Claude. Highlight text anywhere, press a shortcut, and get it rewritten instantly — as Trump, a professional email, bullet points, and more.
+A macOS text transformation tool powered by Hammerspoon and an OpenAI-compatible API. Highlight text anywhere, press a shortcut, and get it rewritten instantly — as Trump, a professional email, bullet points, and more.
+
+> The Trumpify and LinkedIn modes are parody. This project is not affiliated with Donald Trump, LinkedIn or their organizations.
 
 ## Prerequisites
 
 - **macOS**
 - **[Hammerspoon](https://www.hammerspoon.org/)** — install via `brew install --cask hammerspoon` or from the website
-- **HAI Proxy** — running locally (`hai proxy start`)
+- **[OpenRouter](https://openrouter.ai/) API key** — or another OpenAI-compatible chat-completions endpoint
 - **edge-tts** (optional, for high-quality text-to-speech) — `pip install edge-tts` or `pipx install edge-tts`. Without it, TTS falls back to the built-in macOS voice.
 
 ## Installation
@@ -22,9 +24,9 @@ A macOS text transformation tool powered by Hammerspoon and Claude. Highlight te
      ```
    - **.env file**: Copy `.env.example` to `.env` in the project root:
      ```
-     HAIPROXY_API_KEY=your-api-key-here
+     OPENROUTER_API_KEY=your-api-key-here
      ```
-   - **Environment variable**: Set `HAIPROXY_API_KEY` globally.
+   - **Environment variable**: Set `OPENROUTER_API_KEY` globally. `OPENAI_API_KEY` is also recognized for custom OpenAI-compatible setups.
 
 3. **Configure Hammerspoon** — add this to `~/.hammerspoon/init.lua` (create the file if it doesn't exist):
 
@@ -46,13 +48,7 @@ A macOS text transformation tool powered by Hammerspoon and Claude. Highlight te
 4. **Grant Accessibility permissions** to Hammerspoon:
    System Settings → Privacy & Security → Accessibility → enable Hammerspoon
 
-5. **Start HAI Proxy:**
-
-   ```bash
-   hai proxy start
-   ```
-
-6. **Reload Hammerspoon** — click the Hammerspoon menu bar icon → Reload Config, or press `⌃⌥R`.
+5. **Reload Hammerspoon** — click the Hammerspoon menu bar icon → Reload Config, or press `⌃⌥R`.
 
    You should see a **"Trumpify loaded!"** notification.
 
@@ -116,7 +112,7 @@ Open via the chooser (`⌃⌥Space` → **Settings**):
 - **Shortcuts**: per-mode hotkey editing with live collision validation
 - **Modes**: enable/disable individual modes
 - **Custom Modes**: create your own transformations — name, description, hotkey and system prompt, no code or reload required
-- **Advanced**: API endpoint, model, max tokens, **API key** (stored masked; only the last 4 characters are shown) and the translation target language for the Translate mode
+- **Advanced**: API endpoint, model, max tokens, **API key** (masked in the UI; only the last 4 characters are shown) and the translation target language for the Translate mode
 - **Reset to Defaults**: restores all settings (applied after clicking Save)
 
 Changes take effect immediately — no Hammerspoon reload required.
@@ -127,6 +123,8 @@ Changes take effect immediately — no Hammerspoon reload required.
 2. **Press a shortcut** (e.g., `⌃⌥T`)
 3. A **"Processing..."** indicator appears
 4. The transformed text either **replaces your selection** or is **shown in a dialog** (Summary mode)
+
+Temporary connection failures, rate limits and retryable server errors are retried automatically with bounded exponential backoff and jitter. A numeric `Retry-After` response header is honored.
 
 ## Configuration
 
@@ -139,8 +137,8 @@ See `config.example.json` for all options:
 
 ```json
 {
-    "endpoint": "http://localhost:6655/anthropic/v1/messages",
-    "model": "anthropic--claude-4.6-opus",
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "model": "openai/gpt-4.1-mini",
     "maxTokens": 4096,
     "apiKey": "your-api-key",
     "keymap": {
@@ -165,8 +163,15 @@ See `config.example.json` for all options:
 - `tts` — text-to-speech settings; `voice: null` enables automatic language detection
 - `disabledModes` — mode IDs listed here are hidden from hotkeys and the chooser
 - `translate.target` — target language for the Translate mode; empty means auto (German → English, everything else → German)
+- `endpoint` — any API implementing the OpenAI chat-completions format
+- `model` — the provider-specific model ID, for example an OpenRouter model slug
 
 All of these can also be edited in the Settings panel, which writes back to `~/.config/trumpify/config.json`. Custom modes are stored separately in `~/.config/trumpify/custom_modes.json`.
+The API key is stored locally as plain text. Do not share either configuration file or commit it to a repository.
+
+## Privacy
+
+Trumpify reads only the text you explicitly select. That text is sent to the API endpoint configured in Settings, so the privacy policy of that provider applies. Transformation history stays in Hammerspoon memory and is cleared when Hammerspoon restarts; it is not written to the repository.
 
 ## Custom modes
 
@@ -215,7 +220,7 @@ Trumpify/
 │   ├── init.lua            Entry point — loads and initializes all modules
 │   ├── constants.lua       Centralized values, paths, and timing
 │   ├── config.lua          JSON config loader/saver with .env fallback
-│   ├── api.lua             HAI Proxy HTTP client with retry & sanitization
+│   ├── api.lua             OpenAI-compatible API client with retry & sanitization
 │   ├── ui.lua              UI helpers: alerts, dialogs, scrollable webview
 │   ├── selection.lua       Text capture with clipboard fallback + restore
 │   ├── transformer.lua     Orchestrates capture → API → paste/copy/dialog
@@ -245,7 +250,7 @@ brew install luarocks
 luarocks install busted
 
 # Run tests
-cd test && busted .
+busted .
 
 # Lint
 luacheck trumpify/ prompts/
@@ -256,7 +261,10 @@ luacheck trumpify/ prompts/
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | "API key not configured" | No API key found | Add key to config.json, .env, or env var |
-| "HAI Proxy not running" | HAI Proxy is down | Run `hai proxy start` |
-| "Connection failed" | Network or proxy issue | Check `http://localhost:6655` is reachable |
+| "Connection failed" | API endpoint unavailable or incorrect | Check the endpoint in Settings and your internet connection |
 | "Invalid API key" | Wrong key | Verify key in config.json or .env |
 | No text captured | No accessibility permission | Enable Hammerspoon in System Settings → Privacy → Accessibility |
+
+## License
+
+[MIT](LICENSE)

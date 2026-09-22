@@ -66,14 +66,21 @@ M.PROCESSING_ALERT_STYLE = {
 
 -- Default API configuration
 M.DEFAULT_API_CONFIG = {
-    endpoint = "http://localhost:6655/anthropic/v1/messages",
-    model = "anthropic--claude-sonnet-latest",
-    maxTokens = 32000,
+    endpoint = "https://openrouter.ai/api/v1/chat/completions",
+    model = "openai/gpt-4.1-mini",
+    maxTokens = 4096,
     apiKey = nil,
 }
 
+M.API_RETRY = {
+    maxRetries = 4,
+    baseDelaySeconds = 1,
+    maxDelaySeconds = 30,
+    jitterRatio = 0.25,
+}
+
 -- Text processing limits
-M.MAX_TEXT_LENGTH = 35000  -- ~maxTokens * 3 characters
+M.MAX_TEXT_LENGTH = 35000  -- hard safety cap before sending selected text
 M.LARGE_TEXT_WARNING_THRESHOLD = 25000
 
 -- Timing constants (microseconds)
@@ -115,10 +122,9 @@ M.NOTIFICATIONS = {
     DONE = "Done!",
     ERROR_PREFIX = "Error: ",
     API_KEY_MISSING = "API key not configured. Check ~/.config/trumpify/config.json or .env",
-    HAI_PROXY_NOT_RUNNING = "HAI Proxy not running. Start with: hai proxy start",
     INVALID_API_KEY = "Invalid API key",
     RATE_LIMITED = "Rate limited. Please wait.",
-    NETWORK_ERROR = "Connection failed. Is HAI Proxy running?",
+    NETWORK_ERROR = "Connection failed. Check the configured API endpoint.",
     PERMISSION_DENIED = "Accessibility permission required for Hammerspoon",
     LARGE_TEXT_WARNING = "Large text selected ({chars} chars). Processing may take longer.",
     TTS_SPEAKING = "Speaking... (⌃⌥. to stop)",

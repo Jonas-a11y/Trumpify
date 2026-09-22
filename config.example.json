@@ -1,7 +1,7 @@
 {
     "_comment": "Trumpify Configuration",
-    "endpoint": "http://localhost:6655/anthropic/v1/messages",
-    "model": "anthropic--claude-4.6-opus",
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "model": "openai/gpt-4.1-mini",
     "maxTokens": 4096,
     "apiKey": "",
 

@@ -12,6 +12,11 @@ All notable changes to Trumpify will be documented in this file.
 - `.env.example` template for API key configuration
 
 ### Changed
+- Replaced the SAP-specific local proxy with an OpenAI-compatible API client
+- OpenRouter is now the default provider and uses Bearer authentication
+- Added `OPENROUTER_API_KEY` and `OPENAI_API_KEY` environment-variable support
+- Documented how selected text is sent to the configured provider
+- Added bounded exponential backoff with jitter for connection errors, rate limits and temporary server failures
 - Settings are now written to `~/.config/trumpify/config.json` instead of the project-level `config.json` (keeps secrets out of the repository directory)
 - History ring buffer extended from 5 to 20 entries
 - Hotkey collision validation now checks all effective keys (overrides and per-mode defaults), not just overrides

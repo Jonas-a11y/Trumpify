@@ -85,7 +85,8 @@ end
 local function load_env_file(env_path)
     local content = read_text_file(env_path)
     if not content then return nil end
-    return content:match("HAIPROXY_API_KEY=([^\n%s]+)")
+    return content:match("OPENROUTER_API_KEY=([^\n%s]+)")
+        or content:match("OPENAI_API_KEY=([^\n%s]+)")
 end
 
 local function merge(base, overrides)
@@ -144,9 +145,10 @@ function M.init()
         end
     end
 
-    -- Environment variable last-resort
+    -- Environment variable last-resort. OpenRouter is the default provider,
+    -- while OPENAI_API_KEY keeps custom OpenAI-compatible setups convenient.
     if not _config.apiKey then
-        _config.apiKey = os.getenv("HAIPROXY_API_KEY")
+        _config.apiKey = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
     end
 end
 

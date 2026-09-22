@@ -19,7 +19,7 @@ jobs:
         run: brew install luacheck || luarocks install luacheck
 
       - name: Run luacheck
-        run: luacheck trumpify/ prompts/ || true
+        run: luacheck trumpify/ prompts/
 
   test:
     runs-on: macos-latest

@@ -18,7 +18,7 @@ else
     -- be entered directly (Ctrl+Alt+Space -> Settings -> Advanced).
     ui.show_error(
         "API key not found. Open Settings (⌃⌥Space → Settings) and enter it under Advanced.\n" ..
-        "Alternatively set it in ~/.config/trumpify/config.json, project config.json, .env or $HAIPROXY_API_KEY."
+        "Alternatively set it in ~/.config/trumpify/config.json, project config.json, .env or $OPENROUTER_API_KEY."
     )
 end
 
