@@ -15,6 +15,7 @@ All notable changes to Trumpify will be documented in this file.
 
 ### Changed
 - Replaced the SAP-specific local proxy with an OpenAI-compatible API client
+- Trumpify now asks for an explicitly named, exaggerated Donald Trump parody instead of an exact voice imitation, reducing unnecessary model refusals without losing the joke
 - OpenRouter is now the default provider and uses Bearer authentication
 - Added `OPENROUTER_API_KEY` and `OPENAI_API_KEY` environment-variable support
 - Documented how selected text is sent to the configured provider
@@ -46,6 +47,9 @@ All notable changes to Trumpify will be documented in this file.
 - Voice list loaded dynamically from `edge-tts --list-voices` (with hardcoded fallback)
 
 ### Fixed
+- Additional-input modes such as Reply (guided) now open their text prompt correctly and continue with the transformation after confirmation
+- Retry backoff is now visible with the connection issue, delay and current attempt instead of appearing to hang
+- Short summary results now use the always-on-top result window instead of opening unnoticed behind other applications
 - Settings panel JS bridge: user content controller must be passed as third argument to `hs.webview.new` (passing it in the preferences table is silently ignored); explicit `nil` as preferences argument breaks webview creation
 - Shortcut keys are normalized to lowercase when saved (panel displays uppercase, `hs.hotkey.bind` expects lowercase)
 - Chooser menu now shows the effective key from `keymap` overrides instead of the mode default

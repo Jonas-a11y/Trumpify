@@ -36,6 +36,19 @@ function M.show_processing(label)
         constants.PROCESSING_ALERT_STYLE, nil, 60)
 end
 
+function M.show_retry(label, retry)
+    local seconds = math.max(1, math.ceil(retry.delay or 0))
+    local message = string.format(
+        "%s  -  %s\nRetrying in %ds  ·  attempt %d/%d",
+        label,
+        retry.reason or "LLM connection issue",
+        seconds,
+        retry.attempt or 1,
+        retry.total or 1
+    )
+    return hs.alert.show(message, constants.PROCESSING_ALERT_STYLE, nil, 60)
+end
+
 function M.close_processing(alert_id)
     if alert_id then
         hs.alert.closeSpecific(alert_id)
@@ -43,15 +56,10 @@ function M.close_processing(alert_id)
 end
 
 function M.show_summary_dialog(text)
-    local center = M.get_screen_center()
-
-    if #text > 500 then
-        M.show_scrollable_text("Summary", text)
-        return
-    end
-
-    hs.dialog.alert(center.x, center.y, function(_) end,
-        "Summary", text, "OK", nil, "informational")
+    -- hs.dialog.alert can open behind the application the user is working in.
+    -- The webview is explicitly brought above all windows and works for both
+    -- short and long summaries, so the result cannot be missed.
+    return M.show_scrollable_text("Summary", text)
 end
 
 function M.show_scrollable_text(title, text)
@@ -131,24 +139,32 @@ function M.show_scrollable_text(title, text)
 end
 
 function M.show_text_prompt(title, prompt_text, callback, default_text)
-    local center = M.get_screen_center()
-    hs.dialog.textPrompt(
+    -- Unlike hs.dialog.alert, textPrompt is synchronous and returns the
+    -- pressed button plus the entered text. Passing a callback (and x/y
+    -- coordinates) makes Hammerspoon reject the call before a prompt appears.
+    local ok, result, input = pcall(
+        hs.dialog.textPrompt,
         title,
         prompt_text,
         default_text or "",
-        "OK", "Cancel",
-        true,
-        function(result, input)
-            if result == "Cancel" then
-                callback(nil, nil)
-                return
-            end
-            if input and input ~= "" then
-                callback(result, input)
-            end
-        end,
-        center.x, center.y
+        "OK",
+        "Cancel",
+        false
     )
+
+    if not ok then
+        M.show_error("Could not open the additional-input dialog")
+        return
+    end
+
+    if result == "Cancel" then
+        callback(nil, nil)
+        return
+    end
+
+    if input and input ~= "" then
+        callback(result, input)
+    end
 end
 
 function M.get_focused_element()

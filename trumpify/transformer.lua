@@ -74,6 +74,9 @@ function M.execute_transform(mode, text, clipboard_only)
             end
             ui.show_summary_dialog(result)
         end
+    end, function(retry)
+        ui.close_processing(processing_alert)
+        processing_alert = ui.show_retry(label, retry)
     end)
 end
 

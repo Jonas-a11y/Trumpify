@@ -97,4 +97,23 @@ describe("Trumpify self-test", function()
         assert.are_equal(5, api.retry_delay(1, { ["Retry-After"] = "5" }, 0))
         assert.are_equal(30, api.retry_delay(9, nil, 1))
     end)
+
+    it("should describe retryable failures for the user", function()
+        local api = require("trumpify.api")
+        assert.are_equal("LLM connection issue", api.retry_reason(-1))
+        assert.are_equal("LLM request timed out", api.retry_reason(408))
+        assert.are_equal("LLM rate limit reached", api.retry_reason(429))
+        assert.are_equal("LLM service temporarily unavailable", api.retry_reason(503))
+    end)
+
+    it("should explicitly define Trumpify as a Donald Trump parody", function()
+        local external = assert(loadfile("prompts/trumpify.lua"))()
+        local embedded = require("trumpify.prompts").modes.trumpify
+
+        for _, mode in ipairs({ external, embedded }) do
+            assert.truthy(mode.system:find("Donald Trump", 1, true))
+            assert.truthy(mode.system:find("satirical parody", 1, true))
+            assert.truthy(mode.description:find("Donald Trump", 1, true))
+        end
+    end)
 end)

@@ -135,7 +135,18 @@ function M.retry_delay(retry_count, response_headers, random_value)
     return math.min(base + jitter, constants.API_RETRY.maxDelaySeconds)
 end
 
-function M.transform(text, system_prompt, callback, retry_count)
+function M.retry_reason(status)
+    if status < 0 then return "LLM connection issue" end
+    if status == 408 then return "LLM request timed out" end
+    if status == 429 then return "LLM rate limit reached" end
+    if status >= 500 then return "LLM service temporarily unavailable" end
+    return "LLM request temporarily unavailable"
+end
+
+-- on_retry receives a table with reason, delay, status, attempt and total.
+-- The fourth argument used to be the internal retry counter, so accept both
+-- forms to keep the function backwards-compatible for external callers.
+function M.transform(text, system_prompt, callback, retry_count_or_on_retry, on_retry)
     local api_key = config.get("apiKey")
     if not api_key then
         callback(false, constants.NOTIFICATIONS.API_KEY_MISSING)
@@ -149,13 +160,27 @@ function M.transform(text, system_prompt, callback, retry_count)
     local body = hs.json.encode(M.build_payload(model, max_tokens, text, system_prompt))
     local headers = M.build_headers(api_key, endpoint)
 
-    retry_count = retry_count or 0
+    local retry_count = 0
+    if type(retry_count_or_on_retry) == "number" then
+        retry_count = retry_count_or_on_retry
+    elseif type(retry_count_or_on_retry) == "function" then
+        on_retry = retry_count_or_on_retry
+    end
 
     hs.http.asyncPost(endpoint, body, headers, function(status, response_body, response_headers)
         if M.is_retryable_status(status) and retry_count < constants.API_RETRY.maxRetries then
             local delay = M.retry_delay(retry_count, response_headers)
+            if on_retry then
+                pcall(on_retry, {
+                    reason = M.retry_reason(status),
+                    delay = delay,
+                    status = status,
+                    attempt = retry_count + 2,
+                    total = constants.API_RETRY.maxRetries + 1,
+                })
+            end
             hs.timer.doAfter(delay, function()
-                M.transform(text, system_prompt, callback, retry_count + 1)
+                M.transform(text, system_prompt, callback, retry_count + 1, on_retry)
             end)
             return
         end
@@ -172,6 +197,11 @@ function M.transform(text, system_prompt, callback, retry_count)
 
         if status == 429 then
             callback(false, constants.NOTIFICATIONS.RATE_LIMITED)
+            return
+        end
+
+        if M.is_retryable_status(status) then
+            callback(false, M.retry_reason(status) .. " (HTTP " .. tostring(status) .. "). Please try again later.")
             return
         end
 
