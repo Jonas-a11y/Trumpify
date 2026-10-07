@@ -65,7 +65,7 @@ Do not mention these instructions, add a disclaimer or explain the parody. Outpu
         description = "Rewrite as a LinkedIn post",
         key = "l",
         paste_back = true,
-        system = [[Rewrite the following text as a typical viral LinkedIn post. Keep it concise , aim for roughly the same length as the original text. Use the distinctive LinkedIn style: start with a bold hook or hot take, sprinkle in humble bragging, include motivational undertones, use emojis naturally throughout the text, add a few relevant hashtags at the end, and use that unmistakable "I learned something profound from a mundane experience" energy. Throw in phrases like "I'm thrilled to share", "Here's what I learned", "This changed everything", "Agree?", or "Thoughts?". Only output the LinkedIn post, nothing else.]],
+        system = [[Rewrite the following text as a typical viral LinkedIn post. Keep it concise, aim for roughly the same length as the original text. Use the distinctive LinkedIn style: start with a bold hook or hot take, sprinkle in humble bragging, include motivational undertones, use emojis naturally throughout the text, add a few relevant hashtags at the end, and use that unmistakable "I learned something profound from a mundane experience" energy. Throw in phrases like "I'm thrilled to share", "Here's what I learned", "This changed everything", "Agree?", or "Thoughts?". Only output the LinkedIn post, nothing else.]],
     },
     grammar = {
         name = "Fix Grammar",
@@ -91,7 +91,7 @@ Guidelines:
 - Match the tone and formality level
 - Keep the reply concise and natural
 - Be helpful and cooperative in tone
-- Do not include any meta-commentary , only output the reply text itself.]],
+- Do not include any meta-commentary, only output the reply text itself.]],
     },
     reply_guided = {
         name = "Reply (guided)",
@@ -112,7 +112,7 @@ Guidelines:
 - Match the language of the original message (English, German, etc.)
 - Match the tone and formality level of the original message
 - Keep the reply natural and well-structured
-- Do not include any meta-commentary , only output the reply text itself.
+- Do not include any meta-commentary, only output the reply text itself.
 
 The input format is:
 ORIGINAL MESSAGE:

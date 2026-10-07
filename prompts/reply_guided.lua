@@ -17,7 +17,7 @@ Guidelines:
 - Match the language of the original message (English, German, etc.)
 - Match the tone and formality level of the original message
 - Keep the reply natural and well-structured
-- Do not include any meta-commentary , only output the reply text itself.
+- Do not include any meta-commentary, only output the reply text itself.
 
 The input format is:
 ORIGINAL MESSAGE:

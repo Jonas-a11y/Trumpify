@@ -15,5 +15,5 @@ Guidelines:
 - Match the tone and formality level
 - Keep the reply concise and natural
 - Be helpful and cooperative in tone
-- Do not include any meta-commentary , only output the reply text itself.]],
+- Do not include any meta-commentary, only output the reply text itself.]],
 }
