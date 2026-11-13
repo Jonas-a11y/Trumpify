@@ -80,6 +80,8 @@ All shortcuts use **Ctrl + Option** (`⌃⌥`) as the base modifier.
 | Shortcut | Mode | What it does |
 |----------|------|-------------|
 | `⌃⌥T` | Trumpify | Rewrites in Trump's voice with rambling tangents |
+| `⌃⌥O` | Dialog | Replaces the selection with a short dialogue between three characters |
+| `⌃⌥U` | Surprise | Rewrites in an unexpected form within your configured limits |
 | `⌃⌥E` | Email | Turns into a professional email |
 | `⌃⌥S` | Summary | Summarizes text (shown in a dialog — click OK to dismiss) |
 | `⌃⌥F` | Formal | Rewrites in formal/academic tone |
@@ -93,7 +95,7 @@ All shortcuts use **Ctrl + Option** (`⌃⌥`) as the base modifier.
 | `⌃⌥V` | Translate | Detects the language and translates (target configurable in Settings) |
 | `⌃⌥M` | Read Aloud | Reads the selected text aloud (Edge neural voice) |
 | `⌃⌥Y` | Summarize & Speak | Summarizes and reads the summary aloud |
-| `⌃⌥.` | Stop TTS | Stops current speech playback |
+| `⌃⌥.` | Stop | Stops speech, cancels transformations and prevents late results from being inserted |
 | `⌃⌥H` | History | Browse recent transformations: copy, paste or read aloud |
 | `⌃⌥Space` | Chooser | Searchable menu of all modes + Settings + History |
 | `⌃⌥R` | Reload | Reloads Hammerspoon config |
@@ -125,6 +127,26 @@ Every transformation is kept in a ring buffer (last 20 results). Press `⌃⌥H`
 - **Paste** — paste it at the cursor position
 - **Read Aloud** — speak the result
 
+Selecting an entry opens an Original/Result comparison. **Neu formulieren** submits
+the original input with the same prompt and shows the new result; it is also copied
+to the clipboard. **Als Modus speichern** saves the prompt, including a Surprise
+result's selected form and constraints, as a reusable custom mode.
+
+Only one text transformation is active at a time. Repeated shortcuts for the same
+text and mode are ignored while processing. A different transformation replaces
+the pending one. **Ctrl+Option+.** cancels it, stops scheduled retries and discards
+late responses; a request already sent to the provider may continue there.
+
+## Creative modes
+
+Settings offers Trumpify intensity (**Dezent / Überzogen / Maximal**) and length
+(**Kurz / Ursprüngliche Länge / Ausschweifend**). Dialog replaces the selection
+with a moderator, skeptical expert and enthusiastic salesperson; it does not
+start speech playback. Surprise chooses a form such as a haiku, herald's
+announcement or space mission briefing. Configure its maximum sentence count,
+office suitability and preservation of facts in Settings. These constraints are
+model instructions; check generated results before using them.
+
 ## Settings Panel
 
 Open via the chooser (`⌃⌥Space` → **Settings**):
@@ -133,7 +155,9 @@ Open via the chooser (`⌃⌥Space` → **Settings**):
 - **Shortcuts**: per-mode hotkey editing with live collision validation
 - **Modes**: enable/disable individual modes
 - **Custom Modes**: create your own transformations — name, description, hotkey and system prompt, no code or reload required
-- **Advanced**: API endpoint, model, max tokens, **API key** (masked in the UI; only the last 4 characters are shown) and the translation target language for the Translate mode
+- **Advanced**: API endpoint, model, reasoning effort, max tokens, **API key** (masked in the UI; only the last 4 characters are shown) and the translation target language for the Translate mode
+- **Use local HAI**: fills the local LiteLLM endpoint, GPT-6 Luna and low reasoning; save to apply
+- **Test connection**: tests the displayed API settings without changing the active configuration and reports the response model
 - **Reset to Defaults**: restores all settings (applied after clicking Save)
 
 Changes take effect immediately — no Hammerspoon reload required.
@@ -186,8 +210,13 @@ See `config.example.json` for all options:
 - `translate.target` — target language for the Translate mode; empty means auto (German → English, everything else → German)
 - `endpoint` — any API implementing the OpenAI chat-completions format
 - `model` — the provider-specific model ID, for example an OpenRouter model slug
+- `reasoningEffort` — optional reasoning effort for models that support it, for example `"low"` for GPT-6 Luna
 
-All of these can also be edited in the Settings panel, which writes back to `~/.config/trumpify/config.json`. Custom modes are stored separately in `~/.config/trumpify/custom_modes.json`.
+For a local HAI proxy, use `http://localhost:6655/litellm/v1/chat/completions` with
+`model: "gpt-6-luna"` and `reasoningEffort: "low"`. The proxy must be running,
+and `apiKey` must match its local API key.
+
+All settings can be edited in the Settings panel, which writes back to `~/.config/trumpify/config.json`. Custom modes are stored separately in `~/.config/trumpify/custom_modes.json`.
 The API key is stored locally as plain text. Do not share either configuration file or commit it to a repository.
 
 ## Privacy

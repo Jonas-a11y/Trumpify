@@ -16,6 +16,7 @@ PROVIDER=""
 ENDPOINT=""
 MODEL=""
 MAX_TOKENS=4096
+REASONING_EFFORT=""
 API_KEY_ENV="TRUMPIFY_API_KEY"
 SKIP_API_TEST=0
 SKIP_HAMMERSPOON_CHECK=0
@@ -48,10 +49,11 @@ Usage:
 
 Options:
   --non-interactive            Do not prompt; read the key from an environment variable
-  --provider NAME              openrouter (default) or custom
+  --provider NAME              openrouter (default), hai (local LiteLLM) or custom
   --endpoint URL               API base URL or full /chat/completions URL
   --model ID                   Provider model ID
   --max-tokens NUMBER          Maximum output tokens (default: 4096)
+  --reasoning-effort LEVEL      default, none, low, medium, high, xhigh or max
   --api-key-env NAME           Environment variable containing the key
                                (default: TRUMPIFY_API_KEY)
   --skip-api-test              Write configuration without testing the endpoint
@@ -75,6 +77,7 @@ while [[ $# -gt 0 ]]; do
         --endpoint) need_value "$1" "${2-}"; ENDPOINT=$2; shift 2 ;;
         --model) need_value "$1" "${2-}"; MODEL=$2; shift 2 ;;
         --max-tokens) need_value "$1" "${2-}"; MAX_TOKENS=$2; shift 2 ;;
+        --reasoning-effort) need_value "$1" "${2-}"; REASONING_EFFORT=$2; shift 2 ;;
         --api-key-env) need_value "$1" "${2-}"; API_KEY_ENV=$2; shift 2 ;;
         --skip-api-test) SKIP_API_TEST=1; shift ;;
         --no-reload) NO_RELOAD=1; shift ;;
@@ -178,11 +181,13 @@ choose_provider() {
             info "Choose an API provider:"
             info "  1) OpenRouter (recommended)"
             info "  2) Custom OpenAI-compatible endpoint"
+            info "  3) Local HAI / LiteLLM (GPT-6 Luna, low reasoning)"
             local choice
             read -r -p "Selection [1]: " choice
             case ${choice:-1} in
                 1) PROVIDER=openrouter ;;
                 2) PROVIDER=custom ;;
+                3) PROVIDER=hai ;;
                 *) die "Invalid provider selection" ;;
             esac
         else
@@ -214,12 +219,28 @@ choose_provider() {
                 [[ -n $ENDPOINT ]] || die "--endpoint is required for a custom provider"
                 [[ -n $MODEL ]] || die "--model is required for a custom provider"
             fi
+            if [[ $MODEL == "$existing_model" ]]; then
+                REASONING_EFFORT=${REASONING_EFFORT:-$(read_config_value reasoningEffort)}
+            fi
             ;;
-        *) die "Provider must be 'openrouter' or 'custom'" ;;
+        hai)
+            ENDPOINT=${ENDPOINT:-"http://localhost:6655/litellm/v1/chat/completions"}
+            MODEL=${MODEL:-"gpt-6-luna"}
+            REASONING_EFFORT=${REASONING_EFFORT:-low}
+            ;;
+        *) die "Provider must be 'openrouter', 'hai' or 'custom'" ;;
     esac
 
     ENDPOINT=$(normalize_endpoint "$ENDPOINT")
     [[ -n $MODEL ]] || die "Model must not be empty"
+    if (( INTERACTIVE == 1 )); then
+        REASONING_EFFORT=$(prompt_value "Reasoning (default, none, low, medium, high, xhigh, max)" "${REASONING_EFFORT:-default}")
+    fi
+    case $REASONING_EFFORT in
+        default|"") REASONING_EFFORT="" ;;
+        none|low|medium|high|xhigh|max) ;;
+        *) die "Invalid reasoning effort" ;;
+    esac
 }
 
 read_api_key() {
@@ -244,7 +265,7 @@ read_api_key() {
 
 make_api_payload() {
     local path=$1
-    WIZARD_PAYLOAD_PATH=$path WIZARD_MODEL=$MODEL WIZARD_MAX_TOKENS=$MAX_TOKENS \
+    WIZARD_PAYLOAD_PATH=$path WIZARD_MODEL=$MODEL WIZARD_MAX_TOKENS=$MAX_TOKENS WIZARD_REASONING=$REASONING_EFFORT \
         /usr/bin/osascript -l JavaScript <<'JXA' >/dev/null
 ObjC.import('Foundation')
 function env(name) {
@@ -256,11 +277,12 @@ const payload = {
   model: model,
   messages: [{ role: 'user', content: 'Reply with exactly OK' }]
 }
-if (model.toLowerCase().includes('gpt-5')) {
+if (/gpt-[56]/i.test(model)) {
   payload.max_completion_tokens = Number(env('WIZARD_MAX_TOKENS'))
 } else {
   payload.max_tokens = Number(env('WIZARD_MAX_TOKENS'))
 }
+if (env('WIZARD_REASONING')) payload.reasoning_effort = env('WIZARD_REASONING')
 const text = $(JSON.stringify(payload))
 const ok = text.writeToFileAtomicallyEncodingError(
   $(env('WIZARD_PAYLOAD_PATH')), true, $.NSUTF8StringEncoding, null
@@ -331,7 +353,7 @@ write_config() {
     mkdir -p "$CONFIG_DIR"
     chmod 700 "$CONFIG_DIR"
     WIZARD_CONFIG_PATH=$CONFIG_PATH WIZARD_ENDPOINT=$ENDPOINT WIZARD_MODEL=$MODEL \
-        WIZARD_MAX_TOKENS=$MAX_TOKENS WIZARD_API_KEY=$API_KEY \
+        WIZARD_MAX_TOKENS=$MAX_TOKENS WIZARD_API_KEY=$API_KEY WIZARD_REASONING=$REASONING_EFFORT \
         /usr/bin/osascript -l JavaScript <<'JXA' >/dev/null
 ObjC.import('Foundation')
 function env(name) {
@@ -350,6 +372,8 @@ config.endpoint = env('WIZARD_ENDPOINT')
 config.model = env('WIZARD_MODEL')
 config.maxTokens = Number(env('WIZARD_MAX_TOKENS'))
 config.apiKey = env('WIZARD_API_KEY')
+if (env('WIZARD_REASONING')) config.reasoningEffort = env('WIZARD_REASONING')
+else delete config.reasoningEffort
 const text = $(JSON.stringify(config, null, 2) + '\n')
 const ok = text.writeToFileAtomicallyEncodingError(
   $(path), true, $.NSUTF8StringEncoding, null

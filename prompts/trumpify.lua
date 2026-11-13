@@ -3,6 +3,7 @@ return {
     description = "Rewrite as an exaggerated Donald Trump parody",
     key = "t",
     paste_back = true,
+    creative = "trumpify",
     system = [[Rewrite the following text as an exaggerated satirical parody of a Donald Trump speech. The result should unmistakably evoke Trump's public rhetorical mannerisms and comic persona while remaining an obviously fictional parody, not an authentic quotation.
 
 Style guidelines:

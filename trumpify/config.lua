@@ -70,6 +70,9 @@ local function parse_config_string(content)
     local max_tokens = extract_json_number(content, "maxTokens")
     if max_tokens then cfg.maxTokens = max_tokens end
 
+    local reasoning_effort = extract_json_string(content, "reasoningEffort")
+    if reasoning_effort then cfg.reasoningEffort = reasoning_effort end
+
     local keymap = extract_keymap(content)
     if keymap then cfg.keymap = keymap end
 
@@ -161,9 +164,9 @@ function M.get_all()
     return _config
 end
 
--- Keys managed by the settings panel; only these are written back on save.
+-- Only these configuration keys are written back on save.
 local MANAGED_KEYS = { "tts", "keymap", "disabledModes", "endpoint", "model",
-    "maxTokens", "apiKey", "translate" }
+    "maxTokens", "reasoningEffort", "apiKey", "translate", "creative" }
 
 function M.set(key, value)
     if _config == nil then

@@ -32,7 +32,7 @@ function M.show_clipboard_success(mode_name)
 end
 
 function M.show_processing(label)
-    return hs.alert.show(label .. "  -  " .. constants.NOTIFICATIONS.PROCESSING,
+    return hs.alert.show(label .. "  -  " .. constants.NOTIFICATIONS.PROCESSING .. " (⌃⌥. to cancel)",
         constants.PROCESSING_ALERT_STYLE, nil, 60)
 end
 
@@ -62,7 +62,8 @@ function M.show_summary_dialog(text)
     return M.show_scrollable_text("Summary", text)
 end
 
-function M.show_scrollable_text(title, text)
+function M.show_scrollable_text(title, text, options)
+    options = options or {}
     local screen = hs.screen.mainScreen()
     local frame = screen:frame()
     local w = math.min(frame.w * 0.7, 700)
@@ -70,14 +71,31 @@ function M.show_scrollable_text(title, text)
     local x = frame.x + (frame.w - w) / 2
     local y = frame.y + (frame.h - h) / 2
 
+    local controller
+    if options.on_action then controller = hs.webview.usercontent.new("trumpifyResult") end
     local webview = hs.webview.new({ x = x, y = y, w = w, h = h }, {
         developerExtras = false,
-    })
+    }, controller)
 
     local escaped_text = text
         :gsub("&", "&amp;")
         :gsub("<", "&lt;")
         :gsub(">", "&gt;")
+    local original = options.original and options.original:gsub("&", "&amp;")
+        :gsub("<", "&lt;"):gsub(">", "&gt;")
+    local body = "<pre>" .. escaped_text .. "</pre>"
+    if original then
+        body = '<div class="comparison"><section><h2>Original</h2><pre>' .. original
+            .. '</pre></section><section><h2>Ergebnis</h2><pre>' .. escaped_text .. '</pre></section></div>'
+    end
+    if options.actions then
+        body = body .. '<nav>'
+        for _, action in ipairs(options.actions) do
+            body = body .. '<button onclick="window.webkit.messageHandlers.trumpifyResult.postMessage(\''
+                .. action.id .. '\')">' .. action.label .. '</button>'
+        end
+        body = body .. '</nav>'
+    end
 
     local html = [[<!DOCTYPE html>
 <html>
@@ -100,10 +118,16 @@ function M.show_scrollable_text(title, text)
     margin: 0;
     font-family: -apple-system, sans-serif;
   }
+  .comparison { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.1em; color:#b7c5d7; }
+  nav { position:sticky; bottom:0; background:#1e1e1e; display:flex; gap:8px; padding-top:16px; flex-wrap:wrap; }
+  button { background:#293e58; color:#fff; border:1px solid #536c8a; border-radius:6px; padding:8px 12px; cursor:pointer; }
+  button:focus-visible { outline:2px solid #a5cfff; outline-offset:2px; }
+  @media(max-width:500px) { .comparison { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
-<pre>]] .. escaped_text .. [[</pre>
+]] .. body .. [[
 </body>
 </html>]]
 
@@ -125,13 +149,30 @@ function M.show_scrollable_text(title, text)
 
     -- Escape closes the window
     local modal = hs.hotkey.modal.new()
-    modal:bind({}, "escape", function()
+    local function close()
         modal:exit()
-        pcall(function() webview:delete() end)
+        webview:delete()
+    end
+    if controller then
+        controller:setCallback(function(message)
+            local action = type(message) == "table" and message.body or message
+            for _, item in ipairs(options.actions) do
+                if action == item.id then
+                    close()
+                    options.on_action(action)
+                    return
+                end
+            end
+        end)
+    end
+    webview:windowCallback(function(action)
+        if action == "closing" then modal:exit() end
+    end)
+    modal:bind({}, "escape", function()
+        close()
     end)
     modal:bind({}, "return", function()
-        modal:exit()
-        pcall(function() webview:delete() end)
+        close()
     end)
     modal:enter()
 

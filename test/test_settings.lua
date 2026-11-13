@@ -72,6 +72,9 @@ describe("settings integration", function()
             f:close()
 
             config.set("apiKey", "new-secret")
+            config.set("reasoningEffort", "low")
+            config.set("creative", { intensity = "subtle", length = "short", maxSentences = 2,
+                officeSafe = true, preserveFacts = true })
             config.set("tts", { voice = nil, rate = "+10%", volume = "+0%", pitch = "+0Hz", fallback = false })
             config.set("disabledModes", { "email" })
 
@@ -89,6 +92,8 @@ describe("settings integration", function()
             end
             -- managed keys written (apiKey included since the panel manages it)
             assert.truthy(saved:find('"apiKey":"new-secret"', 1, true))
+            assert.truthy(saved:find('"reasoningEffort":"low"', 1, true))
+            assert.truthy(saved:find('"maxSentences":2', 1, true))
             assert.truthy(saved:find('"rate":"+10%"', 1, true))
             assert.truthy(saved:find('"email"', 1, true))
             -- fallback=false must be explicit (not dropped as null)
