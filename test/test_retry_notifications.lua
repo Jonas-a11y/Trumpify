@@ -53,7 +53,7 @@ describe("API requests and retry notifications", function()
 
     it("sends GPT-6 Luna with the configured reasoning effort", function()
         local values = { apiKey = "test-key", model = "gpt-6-luna",
-            endpoint = "http://localhost:6655/litellm/v1/chat/completions",
+            endpoint = "http://localhost:1234/v1/chat/completions",
             maxTokens = 4096, reasoningEffort = "low" }
         package.loaded["trumpify.config"].get = function(key) return values[key] end
         local payload
@@ -136,11 +136,11 @@ describe("API requests and retry notifications", function()
         local sent
         hs.json.encode = function(payload) sent = payload; return "{}" end
         hs.http.asyncPost = function(endpoint, _, headers)
-            assert.are_equal("http://localhost:6655/litellm/v1/chat/completions", endpoint)
+            assert.are_equal("http://localhost:1234/v1/chat/completions", endpoint)
             assert.are_equal("Bearer draft-key", headers.Authorization)
         end
         require("trumpify.api").transform("Test", "System", function() end, nil, {
-            endpoint = "http://localhost:6655/litellm/v1/chat/completions", apiKey = "draft-key",
+            endpoint = "http://localhost:1234/v1/chat/completions", apiKey = "draft-key",
             model = "gpt-6-luna", maxTokens = 128, reasoningEffort = "low",
         })
         assert.are_equal("gpt-6-luna", sent.model)

@@ -49,7 +49,7 @@ Usage:
 
 Options:
   --non-interactive            Do not prompt; read the key from an environment variable
-  --provider NAME              openrouter (default), hai (local LiteLLM) or custom
+  --provider NAME              openrouter (default), local or custom
   --endpoint URL               API base URL or full /chat/completions URL
   --model ID                   Provider model ID
   --max-tokens NUMBER          Maximum output tokens (default: 4096)
@@ -181,13 +181,13 @@ choose_provider() {
             info "Choose an API provider:"
             info "  1) OpenRouter (recommended)"
             info "  2) Custom OpenAI-compatible endpoint"
-            info "  3) Local HAI / LiteLLM (GPT-6 Luna, low reasoning)"
+            info "  3) Local OpenAI-compatible endpoint (GPT-6 Luna, low reasoning)"
             local choice
             read -r -p "Selection [1]: " choice
             case ${choice:-1} in
                 1) PROVIDER=openrouter ;;
                 2) PROVIDER=custom ;;
-                3) PROVIDER=hai ;;
+                3) PROVIDER=local ;;
                 *) die "Invalid provider selection" ;;
             esac
         else
@@ -223,12 +223,12 @@ choose_provider() {
                 REASONING_EFFORT=${REASONING_EFFORT:-$(read_config_value reasoningEffort)}
             fi
             ;;
-        hai)
-            ENDPOINT=${ENDPOINT:-"http://localhost:6655/litellm/v1/chat/completions"}
+        local)
+            ENDPOINT=${ENDPOINT:-"http://localhost:1234/v1/chat/completions"}
             MODEL=${MODEL:-"gpt-6-luna"}
             REASONING_EFFORT=${REASONING_EFFORT:-low}
             ;;
-        *) die "Provider must be 'openrouter', 'hai' or 'custom'" ;;
+        *) die "Provider must be 'openrouter', 'local' or 'custom'" ;;
     esac
 
     ENDPOINT=$(normalize_endpoint "$ENDPOINT")
