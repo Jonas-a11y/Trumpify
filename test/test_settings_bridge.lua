@@ -34,7 +34,7 @@ describe("settings connection feedback", function()
             hotkey = { modal = { new = function() return { bind = function() end, enter = function() end } end } },
             task = { new = function() return nil end },
             http = { asyncPost = function(endpoint, body, headers, fn)
-                assert.are_equal("http://localhost:6655/litellm/v1/chat/completions", endpoint)
+                assert.are_equal("http://localhost:1234/v1/chat/completions", endpoint)
                 assert.are_equal("Bearer draft-key", headers.Authorization)
                 request_body = json.decode(body)
                 fn(200, json.encode({ model = "gpt-6-luna-2026-09-22",
@@ -44,7 +44,7 @@ describe("settings connection feedback", function()
         local ok, err = pcall(function()
             require("trumpify.settings_panel").show()
             callback({ body = json.encode({ action = "testConnection", payload = {
-                endpoint = "http://localhost:6655/litellm/v1/chat/completions", apiKey = "draft-key",
+                endpoint = "http://localhost:1234/v1/chat/completions", apiKey = "draft-key",
                 model = "gpt-6-luna", maxTokens = 128, reasoningEffort = "low",
             } }) })
             assert.truthy(sent_js:find("Connected", 1, true))

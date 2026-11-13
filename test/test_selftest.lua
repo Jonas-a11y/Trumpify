@@ -60,7 +60,7 @@ describe("Trumpify self-test", function()
 
     it("validates reasoning choices and integer token limits for settings", function()
         local api = require("trumpify.api")
-        local settings = { endpoint = "http://localhost:6655/litellm/v1/chat/completions",
+        local settings = { endpoint = "http://localhost:1234/v1/chat/completions",
             model = "gpt-6-luna", maxTokens = 4096, reasoningEffort = "low" }
         assert.is_true(api.validate_config(settings))
         settings.reasoningEffort = "unknown"

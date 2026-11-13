@@ -746,14 +746,14 @@ window.__STATE__ = ]==] .. state_json .. [==[;
   if (!S.advanced.apiKeyMasked) apiKeyInput.placeholder = 'No key configured - paste your API key here';
   content.appendChild(row('API Key', apiKeyInput, (S.advanced.apiKeyMasked ? 'stored (last 4 shown)' : '')));
 
-  var haiBtn = el('button', {id: 'btn-hai'}, 'Use local HAI');
-  haiBtn.addEventListener('click', function() {
-    endpointInput.value = 'http://localhost:6655/litellm/v1/chat/completions';
+  var localBtn = el('button', {id: 'btn-local'}, 'Use local endpoint');
+  localBtn.addEventListener('click', function() {
+    endpointInput.value = 'http://localhost:1234/v1/chat/completions';
     modelInput.value = 'gpt-6-luna';
     reasoningSelect.value = 'low';
-    document.getElementById('status').textContent = 'HAI profile selected (not saved yet). Use your local proxy API key.';
+    document.getElementById('status').textContent = 'Local profile selected (not saved yet). Adjust the endpoint, model and API key for your server.';
   });
-  content.appendChild(haiBtn);
+  content.appendChild(localBtn);
   var connectionBtn = el('button', {id: 'btn-test-connection', style: 'margin-left:8px;'}, 'Test connection');
   connectionBtn.addEventListener('click', function() {
     post('testConnection', {payload: collectAdvanced()});

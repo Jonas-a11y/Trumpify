@@ -42,7 +42,7 @@ chmod +x "$FAKE_BIN/hs"
 
 run_wizard() {
     if [[ $# == 0 ]]; then
-        set -- --provider custom --endpoint "http://localhost:6655/openai/v1" --model "gpt-5.6-luna"
+        set -- --provider custom --endpoint "http://localhost:1234/v1" --model "gpt-5.6-luna"
     fi
     HOME=$HOME_DIR PATH="$FAKE_BIN:$PATH" TRUMPIFY_API_KEY="test-secret-value" \
         "$ROOT/setup.sh" --non-interactive "$@"
@@ -55,7 +55,7 @@ INIT="$HOME_DIR/.hammerspoon/init.lua"
 [[ -f $CONFIG ]] || { echo "config file missing" >&2; exit 1; }
 [[ -f $INIT ]] || { echo "Hammerspoon init missing" >&2; exit 1; }
 [[ -f $HOME_DIR/hs-reloaded ]] || { echo "Hammerspoon was not reloaded" >&2; exit 1; }
-grep -Fq '"endpoint": "http://localhost:6655/openai/v1/chat/completions"' "$CONFIG"
+grep -Fq '"endpoint": "http://localhost:1234/v1/chat/completions"' "$CONFIG"
 grep -Fq '"model": "gpt-5.6-luna"' "$CONFIG"
 grep -Fq '"apiKey": "test-secret-value"' "$CONFIG"
 [[ $(stat -f '%Lp' "$CONFIG") == 600 ]] || { echo "config permissions are not 600" >&2; exit 1; }
@@ -83,7 +83,7 @@ grep -Fq '"disabledModes": [' "$CONFIG" \
 
 if HOME=$HOME_DIR PATH="$FAKE_BIN:$PATH" TRUMPIFY_API_KEY="test-secret-value" \
     FAKE_CURL_FAILURE=1 "$ROOT/setup.sh" --non-interactive --provider custom \
-    --endpoint "http://localhost:6655/openai/v1" --model "gpt-5.6-luna" \
+    --endpoint "http://localhost:1234/v1" --model "gpt-5.6-luna" \
     > "$TEST_DIR/failure.log" 2>&1; then
     echo "wizard accepted a failed API test" >&2
     exit 1
@@ -94,14 +94,14 @@ if grep -Fq 'test-secret-value' "$TEST_DIR/failure.log"; then
     exit 1
 fi
 
-run_wizard --provider hai > "$TEST_DIR/hai-run.log"
-grep -Fq '"endpoint": "http://localhost:6655/litellm/v1/chat/completions"' "$CONFIG"
+run_wizard --provider local > "$TEST_DIR/local-run.log"
+grep -Fq '"endpoint": "http://localhost:1234/v1/chat/completions"' "$CONFIG"
 grep -Fq '"model": "gpt-6-luna"' "$CONFIG"
 grep -Fq '"reasoningEffort": "low"' "$CONFIG"
 grep -Fq '"reasoning_effort":"low"' "$HOME_DIR/request-payload.json"
 grep -Fq '"max_completion_tokens":4096' "$HOME_DIR/request-payload.json"
 if grep -Fq '"max_tokens"' "$HOME_DIR/request-payload.json"; then
-    echo "HAI request used the wrong token limit" >&2
+    echo "Local request used the wrong token limit" >&2
     exit 1
 fi
 

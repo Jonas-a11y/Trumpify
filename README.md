@@ -156,7 +156,7 @@ Open via the chooser (`⌃⌥Space` → **Settings**):
 - **Modes**: enable/disable individual modes
 - **Custom Modes**: create your own transformations — name, description, hotkey and system prompt, no code or reload required
 - **Advanced**: API endpoint, model, reasoning effort, max tokens, **API key** (masked in the UI; only the last 4 characters are shown) and the translation target language for the Translate mode
-- **Use local HAI**: fills the local LiteLLM endpoint, GPT-6 Luna and low reasoning; save to apply
+- **Use local endpoint**: fills a local OpenAI-compatible endpoint, GPT-6 Luna and low reasoning; save to apply
 - **Test connection**: tests the displayed API settings without changing the active configuration and reports the response model
 - **Reset to Defaults**: restores all settings (applied after clicking Save)
 
@@ -212,9 +212,9 @@ See `config.example.json` for all options:
 - `model` — the provider-specific model ID, for example an OpenRouter model slug
 - `reasoningEffort` — optional reasoning effort for models that support it, for example `"low"` for GPT-6 Luna
 
-For a local HAI proxy, use `http://localhost:6655/litellm/v1/chat/completions` with
-`model: "gpt-6-luna"` and `reasoningEffort: "low"`. The proxy must be running,
-and `apiKey` must match its local API key.
+For a local OpenAI-compatible server, use an endpoint such as `http://localhost:1234/v1/chat/completions` with
+`model: "gpt-6-luna"` and `reasoningEffort: "low"`. Adjust the endpoint and model to your server,
+and set `apiKey` to a key it accepts.
 
 All settings can be edited in the Settings panel, which writes back to `~/.config/trumpify/config.json`. Custom modes are stored separately in `~/.config/trumpify/custom_modes.json`.
 The API key is stored locally as plain text. Do not share either configuration file or commit it to a repository.

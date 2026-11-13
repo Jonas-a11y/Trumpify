@@ -6,7 +6,7 @@ All notable changes to Trumpify will be documented in this file.
 
 ### Added
 - Cancellable transformations with duplicate suppression and a shared speech/transformation stop shortcut
-- Reasoning selector, draft connection test and local HAI/LiteLLM profile in Settings and setup
+- Reasoning selector, draft connection test and local OpenAI-compatible profile in Settings and setup
 - Original/result comparison, rewriting and reusable prompt saving from History
 - Adjustable Trumpify intensity and length
 - Dialog replacement mode and bounded Surprise mode with reusable forms
@@ -21,7 +21,7 @@ All notable changes to Trumpify will be documented in this file.
 ### Changed
 - GPT-6 requests use max_completion_tokens; reasoning effort is passed to compatible endpoints
 - Settings feedback now supports Hammerspoon's JSON fragment restrictions
-- Replaced the SAP-specific local proxy with an OpenAI-compatible API client
+- Replaced the provider-specific local proxy with an OpenAI-compatible API client
 - Trumpify now asks for an explicitly named, exaggerated Donald Trump parody instead of an exact voice imitation, reducing unnecessary model refusals without losing the joke
 - OpenRouter is now the default provider and uses Bearer authentication
 - Added `OPENROUTER_API_KEY` and `OPENAI_API_KEY` environment-variable support
