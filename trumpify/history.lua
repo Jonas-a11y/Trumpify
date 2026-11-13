@@ -5,12 +5,14 @@ local M = {}
 local _history = {}
 local _max_entries = constants.MAX_HISTORY_ENTRIES
 
-function M.add(mode_name, input, output)
+function M.add(mode_name, input, output, details)
     table.insert(_history, 1, {
         mode = mode_name,
         input = input,
         output = output,
         timestamp = os.time(),
+        mode_definition = details and details.mode,
+        system = details and details.system,
     })
 
     if #_history > _max_entries then

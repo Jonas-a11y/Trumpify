@@ -4,6 +4,8 @@ local custom_modes = require("trumpify.custom_modes")
 local prompt_loader = require("trumpify.prompt_loader")
 local tts = require("trumpify.tts")
 local ui = require("trumpify.ui")
+local api = require("trumpify.api")
+local creative = require("trumpify.creative")
 
 local M = {}
 
@@ -66,9 +68,9 @@ end
 
 local function _push_js(fn, data)
     if not M._webview then return end
-    local ok, json = pcall(hs.json.encode, data)
+    local ok, json = pcall(hs.json.encode, { data })
     if not ok or not json then return end
-    local js = "window.trumpifyPanel && window.trumpifyPanel." .. fn .. "(" .. json .. ");"
+    local js = "window.trumpifyPanel && window.trumpifyPanel." .. fn .. "(" .. json .. "[0]);"
     pcall(function() M._webview:evaluateJavaScript(js) end)
 end
 
@@ -165,6 +167,7 @@ local function _handle_save(data)
     local disabled = payload.disabled or {}
     local advanced = payload.advanced or {}
     local translate_cfg = payload.translate or {}
+    local creative_cfg = payload.creative or creative.settings()
 
     -- Custom modes: validate/normalize before any collision checks
     local customs, custom_errors = M.validate_custom_payload(payload.custom or {})
@@ -194,12 +197,15 @@ local function _handle_save(data)
     local endpoint = tostring(advanced.endpoint or "")
     local model = tostring(advanced.model or "")
     local max_tokens = tonumber(advanced.maxTokens) or 0
-    if not endpoint:match("^https?://") then
-        _push_js("showErrors", { "Endpoint must be an http(s) URL" })
+    local valid, validation_error = api.validate_config({ endpoint = endpoint, model = model,
+        maxTokens = max_tokens, reasoningEffort = advanced.reasoningEffort })
+    if not valid then
+        _push_js("showErrors", { validation_error })
         return
     end
-    if model == "" or max_tokens < 1 or max_tokens > 100000 then
-        _push_js("showErrors", { "Model must not be empty; Max Tokens must be 1-100000" })
+    valid, validation_error = creative.validate(creative_cfg)
+    if not valid then
+        _push_js("showErrors", { validation_error })
         return
     end
 
@@ -233,6 +239,8 @@ local function _handle_save(data)
     config.set("endpoint", endpoint)
     config.set("model", model)
     config.set("maxTokens", max_tokens)
+    config.set("reasoningEffort", advanced.reasoningEffort ~= "" and advanced.reasoningEffort or nil)
+    config.set("creative", creative_cfg)
 
     -- Translation target (empty = auto German/English)
     local target = tostring(translate_cfg.target or "")
@@ -301,6 +309,28 @@ local function _load_voices_async()
     end
 end
 
+local function _handle_test_connection(data)
+    local settings = data.payload or {}
+    local valid, err = api.validate_config(settings)
+    if not valid then _push_js("showErrors", { err }); return end
+    if settings.apiKey == M._mask_api_key(config.get("apiKey")) or settings.apiKey == "" then
+        settings.apiKey = config.get("apiKey")
+    end
+    if settings.reasoningEffort == "" then settings.reasoningEffort = nil end
+    if M._api_test then M._api_test.cancel() end
+    local view = M._webview
+    _push_js("showStatus", "Testing connection…")
+    M._api_test = api.transform("Reply with exactly OK.", "This is a connection test.",
+        function(success, result, response)
+            if M._webview ~= view then return end
+            if success then
+                _push_js("showStatus", "Connected · Model: " .. (response.model or "not reported by provider"))
+            else
+                _push_js("showErrors", { result })
+            end
+        end, nil, settings)
+end
+
 local function _handle_message(data)
     local action = data.action
     if action == "close" then
@@ -309,6 +339,8 @@ local function _handle_message(data)
         _handle_test_voice(data)
     elseif action == "save" then
         _handle_save(data)
+    elseif action == "testConnection" then
+        _handle_test_connection(data)
     elseif action == "ready" then
         _load_voices_async()
     end
@@ -338,6 +370,7 @@ function M._build_html()
         model = config.get("model") or defaults.model,
         maxTokens = tonumber(config.get("maxTokens")) or defaults.maxTokens,
         apiKeyMasked = M._mask_api_key(config.get("apiKey")),
+        reasoningEffort = config.get("reasoningEffort") or "",
     }
 
     local translate_cfg = config.get("translate")
@@ -368,6 +401,11 @@ function M._build_html()
             fallback = (tts_cfg.fallback == nil) and true or tts_cfg.fallback and true or false,
         },
         advanced = advanced,
+        reasoningEfforts = api.reasoning_efforts,
+        creative = creative.settings(),
+        creativeDefaults = creative.defaults,
+        intensities = creative.intensities,
+        lengths = creative.lengths,
         custom = custom_modes.load(),
         translate = { target = translate_cfg.target or "" },
         defaults = {
@@ -485,11 +523,35 @@ window.__STATE__ = ]==] .. state_json .. [==[;
   function row(labelText, input, hint) {
     var r = el('div', {class: 'row'});
     var l = el('label', {class: 'main'}, labelText);
+    if (input.id) l.htmlFor = input.id;
     r.appendChild(l);
     r.appendChild(input);
     if (hint) r.appendChild(el('span', {class: 'hint'}, hint));
     return r;
   }
+
+  function selectChoices(id, choices, value) {
+    var input = el('select', {id: id});
+    choices.forEach(function(c) { input.appendChild(el('option', {value: c.value}, c.label)); });
+    input.value = value;
+    return input;
+  }
+
+  section('Creative modes');
+  var intensitySelect = selectChoices('creative-intensity', S.intensities, S.creative.intensity);
+  var lengthSelect = selectChoices('creative-length', S.lengths, S.creative.length);
+  content.appendChild(row('Trumpify: Übertreibung', intensitySelect));
+  content.appendChild(row('Trumpify: Länge', lengthSelect));
+  var sentenceInput = el('input', {type: 'number', id: 'surprise-sentences', min: '1', max: '20',
+    style: 'width:64px; background:#2a2a2a; color:#e0e0e0; border:1px solid #444; padding:5px;'});
+  sentenceInput.value = S.creative.maxSentences;
+  content.appendChild(row('Surprise: max. Sätze', sentenceInput));
+  var officeCheck = el('input', {type: 'checkbox', id: 'surprise-office'});
+  officeCheck.checked = S.creative.officeSafe;
+  content.appendChild(row('Surprise: bürotauglich', officeCheck));
+  var factsCheck = el('input', {type: 'checkbox', id: 'surprise-facts'});
+  factsCheck.checked = S.creative.preserveFacts;
+  content.appendChild(row('Surprise: Fakten behalten', factsCheck));
 
   // ---- TTS section ----
   section('Text-to-Speech');
@@ -559,7 +621,7 @@ window.__STATE__ = ]==] .. state_json .. [==[;
   });
   content.appendChild(shortcutsDiv);
   content.appendChild(el('div', {class: 'hint', style: 'margin-top:4px'},
-    'Reserved: R (reload), Space (chooser), . (stop TTS)'));
+    'Reserved: R (reload), H (history), Space (chooser), . (stop speech and transformations)'));
 
   // ---- Modes section ----
   section('Modes');
@@ -670,6 +732,11 @@ window.__STATE__ = ]==] .. state_json .. [==[;
   modelInput.value = S.advanced.model;
   content.appendChild(row('Model', modelInput));
 
+  var reasoningSelect = selectChoices('adv-reasoning', S.reasoningEfforts.map(function(value) {
+    return {value: value, label: value || 'Provider default'};
+  }), S.advanced.reasoningEffort);
+  content.appendChild(row('Reasoning', reasoningSelect));
+
   var maxTokensInput = el('input', {type: 'text', id: 'adv-maxtokens', style: 'width:90px; text-transform:none;'});
   maxTokensInput.value = S.advanced.maxTokens;
   content.appendChild(row('Max Tokens', maxTokensInput));
@@ -678,6 +745,20 @@ window.__STATE__ = ]==] .. state_json .. [==[;
   apiKeyInput.value = S.advanced.apiKeyMasked || '';
   if (!S.advanced.apiKeyMasked) apiKeyInput.placeholder = 'No key configured - paste your API key here';
   content.appendChild(row('API Key', apiKeyInput, (S.advanced.apiKeyMasked ? 'stored (last 4 shown)' : '')));
+
+  var haiBtn = el('button', {id: 'btn-hai'}, 'Use local HAI');
+  haiBtn.addEventListener('click', function() {
+    endpointInput.value = 'http://localhost:6655/litellm/v1/chat/completions';
+    modelInput.value = 'gpt-6-luna';
+    reasoningSelect.value = 'low';
+    document.getElementById('status').textContent = 'HAI profile selected (not saved yet). Use your local proxy API key.';
+  });
+  content.appendChild(haiBtn);
+  var connectionBtn = el('button', {id: 'btn-test-connection', style: 'margin-left:8px;'}, 'Test connection');
+  connectionBtn.addEventListener('click', function() {
+    post('testConnection', {payload: collectAdvanced()});
+  });
+  content.appendChild(connectionBtn);
 
   var translateInput = el('input', {type: 'text', id: 'adv-translate', style: 'flex:1; width:auto; text-transform:none;'});
   translateInput.value = S.translate.target;
@@ -713,6 +794,7 @@ window.__STATE__ = ]==] .. state_json .. [==[;
     return {
       endpoint: endpointInput.value.trim(),
       model: modelInput.value.trim(),
+      reasoningEffort: reasoningSelect.value,
       maxTokens: parseInt(maxTokensInput.value, 10) || 0,
       apiKey: apiKeyInput.value,
       translateTarget: translateInput.value.trim()
@@ -796,6 +878,9 @@ window.__STATE__ = ]==] .. state_json .. [==[;
       advanced: collectAdvanced(),
       custom: collectCustoms(),
       translate: { target: collectAdvanced().translateTarget }
+      , creative: { intensity: intensitySelect.value, length: lengthSelect.value,
+        maxSentences: parseInt(sentenceInput.value, 10) || 0,
+        officeSafe: officeCheck.checked, preserveFacts: factsCheck.checked }
     } });
   });
 
@@ -817,6 +902,12 @@ window.__STATE__ = ]==] .. state_json .. [==[;
     });
     endpointInput.value = S.defaults.endpoint;
     modelInput.value = S.defaults.model;
+    reasoningSelect.value = '';
+    intensitySelect.value = S.creativeDefaults.intensity;
+    lengthSelect.value = S.creativeDefaults.length;
+    sentenceInput.value = S.creativeDefaults.maxSentences;
+    officeCheck.checked = S.creativeDefaults.officeSafe;
+    factsCheck.checked = S.creativeDefaults.preserveFacts;
     maxTokensInput.value = S.defaults.maxTokens;
     apiKeyInput.value = '';
     translateInput.value = '';
@@ -921,6 +1012,7 @@ function M.show()
 end
 
 function M.close()
+    if M._api_test then M._api_test.cancel(); M._api_test = nil end
     if M._modal then
         pcall(function() M._modal:exit() end)
         M._modal = nil

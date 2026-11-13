@@ -3,6 +3,25 @@ local config = require("trumpify.config")
 
 local M = {}
 
+M.reasoning_efforts = { "", "none", "low", "medium", "high", "xhigh", "max" }
+
+function M.validate_config(settings)
+    if type(settings.endpoint) ~= "string" or not settings.endpoint:match("^https?://[^/%s]+") then
+        return false, "Endpoint must be an http(s) URL"
+    end
+    if type(settings.model) ~= "string" or not settings.model:match("%S") then
+        return false, "Model must not be empty"
+    end
+    if type(settings.maxTokens) ~= "number" or settings.maxTokens % 1 ~= 0
+        or settings.maxTokens < 1 or settings.maxTokens > 100000 then
+        return false, "Max Tokens must be an integer from 1 to 100000"
+    end
+    for _, effort in ipairs(M.reasoning_efforts) do
+        if (settings.reasoningEffort or "") == effort then return true end
+    end
+    return false, "Choose a supported reasoning effort"
+end
+
 local GLOBAL_SYSTEM_INSTRUCTION = [[Global style rule: do not use em dashes in the output. Use commas, semicolons, parentheses, or a normal hyphen-minus (-) if needed.]]
 
 function M.sanitize(text)
@@ -34,10 +53,10 @@ function M.build_payload(model, max_tokens, text, system_prompt)
         },
     }
 
-    -- Current GPT-5 endpoints use max_completion_tokens, while OpenRouter and
+    -- GPT-5 and GPT-6 reasoning models use max_completion_tokens;
     -- older OpenAI-compatible models commonly use max_tokens.
     local normalized_model = tostring(model):lower()
-    local token_field = normalized_model:find("gpt%-5")
+    local token_field = normalized_model:find("gpt%-[56]")
         and "max_completion_tokens" or "max_tokens"
     payload[token_field] = max_tokens
 
@@ -144,86 +163,97 @@ function M.retry_reason(status)
 end
 
 -- on_retry receives a table with reason, delay, status, attempt and total.
--- The fourth argument used to be the internal retry counter, so accept both
--- forms to keep the function backwards-compatible for external callers.
-function M.transform(text, system_prompt, callback, retry_count_or_on_retry, on_retry)
-    local api_key = config.get("apiKey")
-    if not api_key then
+function M.transform(text, system_prompt, callback, on_retry, api_config)
+    local cancelled = false
+    local retry_timer
+    local request = {}
+    function request.cancel()
+        cancelled = true
+        if retry_timer then retry_timer:stop() end
+    end
+    local function get(key)
+        if api_config then return api_config[key] end
+        return config.get(key)
+    end
+    local api_key = get("apiKey")
+    if not api_key or api_key == "" then
         callback(false, constants.NOTIFICATIONS.API_KEY_MISSING)
-        return
+        return request
     end
 
-    local endpoint = config.get("endpoint") or constants.DEFAULT_API_CONFIG.endpoint
-    local model = config.get("model") or constants.DEFAULT_API_CONFIG.model
-    local max_tokens = config.get("maxTokens") or constants.DEFAULT_API_CONFIG.maxTokens
+    local endpoint = get("endpoint") or constants.DEFAULT_API_CONFIG.endpoint
+    local model = get("model") or constants.DEFAULT_API_CONFIG.model
+    local max_tokens = get("maxTokens") or constants.DEFAULT_API_CONFIG.maxTokens
 
-    local body = hs.json.encode(M.build_payload(model, max_tokens, text, system_prompt))
+    local payload = M.build_payload(model, max_tokens, text, system_prompt)
+    payload.reasoning_effort = get("reasoningEffort")
+    local body = hs.json.encode(payload)
     local headers = M.build_headers(api_key, endpoint)
 
-    local retry_count = 0
-    if type(retry_count_or_on_retry) == "number" then
-        retry_count = retry_count_or_on_retry
-    elseif type(retry_count_or_on_retry) == "function" then
-        on_retry = retry_count_or_on_retry
-    end
-
-    hs.http.asyncPost(endpoint, body, headers, function(status, response_body, response_headers)
-        if M.is_retryable_status(status) and retry_count < constants.API_RETRY.maxRetries then
-            local delay = M.retry_delay(retry_count, response_headers)
-            if on_retry then
-                pcall(on_retry, {
-                    reason = M.retry_reason(status),
-                    delay = delay,
-                    status = status,
-                    attempt = retry_count + 2,
-                    total = constants.API_RETRY.maxRetries + 1,
-                })
+    local function send(retry_count)
+        if cancelled then return end
+        hs.http.asyncPost(endpoint, body, headers, function(status, response_body, response_headers)
+            if cancelled then return end
+            if M.is_retryable_status(status) and retry_count < constants.API_RETRY.maxRetries then
+                local delay = M.retry_delay(retry_count, response_headers)
+                if on_retry then
+                    pcall(on_retry, {
+                        reason = M.retry_reason(status),
+                        delay = delay,
+                        status = status,
+                        attempt = retry_count + 2,
+                        total = constants.API_RETRY.maxRetries + 1,
+                    })
+                end
+                if cancelled then return end
+                retry_timer = hs.timer.doAfter(delay, function()
+                    send(retry_count + 1)
+                end)
+                return
             end
-            hs.timer.doAfter(delay, function()
-                M.transform(text, system_prompt, callback, retry_count + 1, on_retry)
-            end)
-            return
-        end
 
-        if status < 0 then
-            callback(false, constants.NOTIFICATIONS.NETWORK_ERROR)
-            return
-        end
+            if status < 0 then
+                callback(false, constants.NOTIFICATIONS.NETWORK_ERROR)
+                return
+            end
 
-        if status == 401 then
-            callback(false, constants.NOTIFICATIONS.INVALID_API_KEY)
-            return
-        end
+            if status == 401 then
+                callback(false, constants.NOTIFICATIONS.INVALID_API_KEY)
+                return
+            end
 
-        if status == 429 then
-            callback(false, constants.NOTIFICATIONS.RATE_LIMITED)
-            return
-        end
+            if status == 429 then
+                callback(false, constants.NOTIFICATIONS.RATE_LIMITED)
+                return
+            end
 
-        if M.is_retryable_status(status) then
-            callback(false, M.retry_reason(status) .. " (HTTP " .. tostring(status) .. "). Please try again later.")
-            return
-        end
+            if M.is_retryable_status(status) then
+                callback(false, M.retry_reason(status) .. " (HTTP " .. tostring(status) .. "). Please try again later.")
+                return
+            end
 
-        local ok, response = pcall(hs.json.decode, response_body)
-        if not ok then
-            callback(false, "JSON parse error")
-            return
-        end
+            local ok, response = pcall(hs.json.decode, response_body)
+            if not ok then
+                callback(false, "JSON parse error")
+                return
+            end
 
-        local result, response_error = M.extract_response(response)
-        if status ~= 200 then
-            callback(false, response_error or ("HTTP " .. tostring(status)))
-            return
-        end
+            local result, response_error = M.extract_response(response)
+            if status ~= 200 then
+                callback(false, response_error or ("HTTP " .. tostring(status)))
+                return
+            end
 
-        if result then
-            callback(true, result)
-            return
-        end
+            if result then
+                callback(true, result, response)
+                return
+            end
 
-        callback(false, response_error)
-    end)
+            callback(false, response_error)
+        end)
+    end
+    send(0)
+    return request
 end
 
 return M

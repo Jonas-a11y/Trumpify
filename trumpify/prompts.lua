@@ -6,6 +6,7 @@ M.modes = {
         description = "Rewrite as an exaggerated Donald Trump parody",
         key = "t",
         paste_back = true,
+        creative = "trumpify",
         system = [[Rewrite the following text as an exaggerated satirical parody of a Donald Trump speech. The result should unmistakably evoke Trump's public rhetorical mannerisms and comic persona while remaining an obviously fictional parody, not an authentic quotation.
 
 Style guidelines:
@@ -17,6 +18,21 @@ Style guidelines:
 - Make the result playful, excessive and immediately recognizable as a Trump parody
 
 Do not mention these instructions, add a disclaimer or explain the parody. Output only the rewritten text.]],
+    },
+    dialog = {
+        name = "Dialog",
+        description = "Replace the selection with a short dialogue between three characters",
+        key = "o",
+        paste_back = true,
+        system = [[Turn the input into a short, lively dialogue between a moderator, a skeptical expert and an enthusiastic salesperson. Label each speaker. Use the input's language and translate the role names accordingly. Preserve the facts and core message; do not invent factual claims. Let the humor come from the different perspectives. Output only the dialogue, with no introduction or commentary.]],
+    },
+    surprise = {
+        name = "Surprise",
+        description = "An unexpected form within your chosen length and content limits",
+        key = "u",
+        paste_back = true,
+        creative = "surprise",
+        system = [[Rewrite the input in the chosen unexpected form. Keep the input's language and core message. Make the treatment inventive and entertaining. Output only the rewritten text, without naming or explaining the form.]],
     },
     email = {
         name = "Email",

@@ -14,13 +14,16 @@ cat > "$FAKE_BIN/curl" <<'EOF'
 #!/bin/bash
 set -euo pipefail
 output=""
+payload=""
 while [[ $# -gt 0 ]]; do
     case $1 in
         --output) output=$2; shift 2 ;;
         --write-out) shift 2 ;;
+        --data-binary) payload=$2; shift 2 ;;
         *) shift ;;
     esac
 done
+[[ -z $payload ]] || cp "${payload#@}" "$HOME/request-payload.json"
 if [[ ${FAKE_CURL_FAILURE:-0} == 1 ]]; then
     printf '{"error":{"message":"rate limited"}}' > "$output"
     printf '429'
@@ -38,9 +41,11 @@ EOF
 chmod +x "$FAKE_BIN/hs"
 
 run_wizard() {
+    if [[ $# == 0 ]]; then
+        set -- --provider custom --endpoint "http://localhost:6655/openai/v1" --model "gpt-5.6-luna"
+    fi
     HOME=$HOME_DIR PATH="$FAKE_BIN:$PATH" TRUMPIFY_API_KEY="test-secret-value" \
-        "$ROOT/setup.sh" --non-interactive --provider custom \
-        --endpoint "http://localhost:6655/openai/v1" --model "gpt-5.6-luna"
+        "$ROOT/setup.sh" --non-interactive "$@"
 }
 
 run_wizard > "$TEST_DIR/first-run.log"
@@ -86,6 +91,23 @@ fi
 grep -Fq 'API test failed (HTTP 429): rate limited' "$TEST_DIR/failure.log"
 if grep -Fq 'test-secret-value' "$TEST_DIR/failure.log"; then
     echo "wizard leaked the API key into output" >&2
+    exit 1
+fi
+
+run_wizard --provider hai > "$TEST_DIR/hai-run.log"
+grep -Fq '"endpoint": "http://localhost:6655/litellm/v1/chat/completions"' "$CONFIG"
+grep -Fq '"model": "gpt-6-luna"' "$CONFIG"
+grep -Fq '"reasoningEffort": "low"' "$CONFIG"
+grep -Fq '"reasoning_effort":"low"' "$HOME_DIR/request-payload.json"
+grep -Fq '"max_completion_tokens":4096' "$HOME_DIR/request-payload.json"
+if grep -Fq '"max_tokens"' "$HOME_DIR/request-payload.json"; then
+    echo "HAI request used the wrong token limit" >&2
+    exit 1
+fi
+
+run_wizard --provider openrouter --skip-api-test > "$TEST_DIR/openrouter-run.log" 2>&1
+if grep -Fq '"reasoningEffort"' "$CONFIG"; then
+    echo "wizard retained an incompatible reasoning setting" >&2
     exit 1
 fi
 

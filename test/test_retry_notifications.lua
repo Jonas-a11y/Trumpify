@@ -1,7 +1,7 @@
--- Tests for visible retry progress without making real HTTP requests.
+-- Tests for API requests and visible retry progress without real HTTP requests.
 -- Run with: busted .
 
-describe("API retry notifications", function()
+describe("API requests and retry notifications", function()
     local original_hs
     local original_api
     local original_config
@@ -37,7 +37,9 @@ describe("API retry notifications", function()
             },
             timer = {
                 doAfter = function(delay, callback)
-                    scheduled = { delay = delay, callback = callback }
+                    scheduled = { delay = delay, callback = callback, stopped = false,
+                        stop = function(self) self.stopped = true end }
+                    return scheduled
                 end,
             },
         }
@@ -47,6 +49,29 @@ describe("API retry notifications", function()
         _G.hs = original_hs
         package.loaded["trumpify.api"] = original_api
         package.loaded["trumpify.config"] = original_config
+    end)
+
+    it("sends GPT-6 Luna with the configured reasoning effort", function()
+        local values = { apiKey = "test-key", model = "gpt-6-luna",
+            endpoint = "http://localhost:6655/litellm/v1/chat/completions",
+            maxTokens = 4096, reasoningEffort = "low" }
+        package.loaded["trumpify.config"].get = function(key) return values[key] end
+        local payload
+        hs.json.encode = function(value)
+            payload = value
+            return "request-body"
+        end
+        hs.http.asyncPost = function(endpoint, body)
+            assert.are_equal(values.endpoint, endpoint)
+            assert.are_equal("request-body", body)
+        end
+
+        require("trumpify.api").transform("Text", "System", function() end)
+
+        assert.are_equal("gpt-6-luna", payload.model)
+        assert.are_equal("low", payload.reasoning_effort)
+        assert.are_equal(4096, payload.max_completion_tokens)
+        assert.is_nil(payload.max_tokens)
     end)
 
     it("reports the reason, delay and next attempt before scheduling a retry", function()
@@ -78,13 +103,48 @@ describe("API retry notifications", function()
 
         api.transform("Text", "System", function(success, message)
             final = { success = success, message = message }
-        end, 4, function()
+        end, function()
             retry_called = true
         end)
+        for _ = 1, 4 do scheduled.callback() end
 
-        assert.is_false(retry_called)
+        assert.is_true(retry_called)
         assert.is_false(final.success)
         assert.truthy(final.message:find("LLM service temporarily unavailable", 1, true))
         assert.truthy(final.message:find("HTTP 503", 1, true))
+    end)
+
+    it("stops retries and ignores responses after cancellation", function()
+        local completed = false
+        local request = require("trumpify.api").transform("Text", "System", function() completed = true end)
+        local retry = scheduled
+        request.cancel()
+        assert.is_true(retry.stopped)
+        response_status = 401
+        retry.callback()
+        assert.is_false(completed)
+
+        local response_callback
+        hs.http.asyncPost = function(_, _, _, callback) response_callback = callback end
+        request = require("trumpify.api").transform("Other", "System", function() completed = true end)
+        request.cancel()
+        response_callback(401, "{}", {})
+        assert.is_false(completed)
+    end)
+
+    it("tests draft settings without changing the active configuration", function()
+        local sent
+        hs.json.encode = function(payload) sent = payload; return "{}" end
+        hs.http.asyncPost = function(endpoint, _, headers)
+            assert.are_equal("http://localhost:6655/litellm/v1/chat/completions", endpoint)
+            assert.are_equal("Bearer draft-key", headers.Authorization)
+        end
+        require("trumpify.api").transform("Test", "System", function() end, nil, {
+            endpoint = "http://localhost:6655/litellm/v1/chat/completions", apiKey = "draft-key",
+            model = "gpt-6-luna", maxTokens = 128, reasoningEffort = "low",
+        })
+        assert.are_equal("gpt-6-luna", sent.model)
+        assert.are_equal("low", sent.reasoning_effort)
+        assert.are_equal("test-model", package.loaded["trumpify.config"].get("model"))
     end)
 end)

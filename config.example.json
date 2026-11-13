@@ -4,6 +4,13 @@
     "model": "openai/gpt-4.1-mini",
     "maxTokens": 4096,
     "apiKey": "",
+    "creative": {
+        "intensity": "exaggerated",
+        "length": "original",
+        "maxSentences": 4,
+        "officeSafe": true,
+        "preserveFacts": true
+    },
 
     "_comment_keymap": "Custom keyboard shortcuts for modes (optional). Leave empty to use defaults.",
     "keymap": {

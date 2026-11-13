@@ -5,10 +5,12 @@ local selection = require("trumpify.selection")
 local api = require("trumpify.api")
 local history = require("trumpify.history")
 local tts = require("trumpify.tts")
+local creative = require("trumpify.creative")
 
 local M = {}
 
 local _initialized = false
+local _active = nil
 
 local AUTO_TARGET_LANGUAGE =
     "German if the text is German, otherwise English (detect the source language first)"
@@ -17,7 +19,7 @@ local AUTO_TARGET_LANGUAGE =
 --- which is replaced with the configured translation target
 --- (config key "translate" -> { target = "..." }).
 function M.build_system(mode)
-    local system = mode.system
+    local system = creative.build_system(mode)
     if type(system) ~= "string" or not system:find("{target_language}", 1, true) then
         return system
     end
@@ -36,7 +38,16 @@ function M.init()
     _initialized = true
 end
 
-function M.execute_transform(mode, text, clipboard_only)
+function M.cancel(notify)
+    if not _active then return false end
+    if _active.request then _active.request.cancel() end
+    ui.close_processing(_active.alert)
+    _active = nil
+    if notify then ui.show_notification("Transformation cancelled") end
+    return true
+end
+
+function M.execute_transform(mode, text, clipboard_only, system_override, on_complete)
     local label = mode.name .. (clipboard_only and " (copy)" or "")
 
     if mode.tts_only then
@@ -48,17 +59,28 @@ function M.execute_transform(mode, text, clipboard_only)
         return
     end
 
-    local processing_alert = ui.show_processing(label)
+    if _active and _active.name == mode.name and _active.text == text
+        and _active.clipboard_only == clipboard_only and _active.system_override == system_override then
+        ui.show_notification("Already processing this text (⌃⌥. to cancel)")
+        return
+    end
+    M.cancel(false)
+    local system = system_override or M.build_system(mode)
+    local job = { name = mode.name, text = text, clipboard_only = clipboard_only,
+        system_override = system_override, alert = ui.show_processing(label) }
+    _active = job
 
-    api.transform(text, M.build_system(mode), function(success, result)
-        ui.close_processing(processing_alert)
+    job.request = api.transform(text, system, function(success, result)
+        if _active ~= job then return end
+        _active = nil
+        ui.close_processing(job.alert)
 
         if not success then
             ui.show_error(mode.name .. ": " .. result)
             return
         end
 
-        history.add(mode.name, text, result)
+        history.add(mode.name, text, result, { mode = mode, system = system })
 
         if clipboard_only then
             selection.copy_to_clipboard(result)
@@ -74,9 +96,11 @@ function M.execute_transform(mode, text, clipboard_only)
             end
             ui.show_summary_dialog(result)
         end
+        if on_complete then on_complete(history.get_latest()) end
     end, function(retry)
-        ui.close_processing(processing_alert)
-        processing_alert = ui.show_retry(label, retry)
+        if _active ~= job then return end
+        ui.close_processing(job.alert)
+        job.alert = ui.show_retry(label, retry)
     end)
 end
 

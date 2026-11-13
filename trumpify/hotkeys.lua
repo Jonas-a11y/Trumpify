@@ -100,7 +100,8 @@ end
 function M.register_stop_tts_hotkey()
     hs.hotkey.bind(constants.MODIFIERS, ".", function()
         tts.stop()
-        ui.show_notification("TTS stopped")
+        transformer.cancel(false)
+        ui.show_notification("Speech and transformations stopped")
     end)
 end
 

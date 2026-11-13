@@ -58,6 +58,18 @@ describe("Trumpify self-test", function()
         assert.is_nil(payload.max_tokens)
     end)
 
+    it("validates reasoning choices and integer token limits for settings", function()
+        local api = require("trumpify.api")
+        local settings = { endpoint = "http://localhost:6655/litellm/v1/chat/completions",
+            model = "gpt-6-luna", maxTokens = 4096, reasoningEffort = "low" }
+        assert.is_true(api.validate_config(settings))
+        settings.reasoningEffort = "unknown"
+        assert.is_false(api.validate_config(settings))
+        settings.reasoningEffort = ""
+        settings.maxTokens = 1.5
+        assert.is_false(api.validate_config(settings))
+    end)
+
     it("should use bearer authentication for OpenAI-compatible endpoints", function()
         local api = require("trumpify.api")
         local headers = api.build_headers("test-key", "https://openrouter.ai/api/v1/chat/completions")
